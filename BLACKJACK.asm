@@ -18,15 +18,16 @@
     .align 2
     UserDeck: .space 208
     DeckFlags: .space 52
+    .align 2
+    UserBust1: .word 0
+    UserBust2: .word 0
+    DealerBust: .word 0
    
 .text
 .globl main
 main:
     la $s7, FrameBuffer  # $s7 = base addr of frame buffer
-    addi $s6, $zero, 0  # USER BUST VALUE 1
-    addi $s5, $zero, 0  # USER BUST VALUE 2 (Used if the hand is split)
-    addi $s4, $zero, 0  # DEALER BUST VALUE
-    ## $s4-7 CANNOT UNDER ANY CIRCUMSTANCES BE OVERRIDDEN / OVERWRITTEN
+    ## $s7 CANNOT UNDER ANY CIRCUMSTANCES BE OVERRIDDEN / OVERWRITTEN
 
     initialize:
         # Print Initial Messages
@@ -282,8 +283,10 @@ main:
         
 addi $s1, $zero, 100
 addi $s0, $zero, 100
+li $s6, -4  # deck index stored in $s6
 # Top left corner of card: x value stored in $s1, y value stored in $s0
 draw_card:
+    addi $s6, $s6, 4  # increment the card index count
 
     li $t0, 66  # card width
     li $t1, 90  # card height
@@ -333,5 +336,848 @@ draw_card:
     	
     # Pick a card form the deck, remove it, draw it, increment the user / dealer bust value
     draw_card_value:
+    
+        addi $t3, $t3, -8
+        addi $t4, $t4, -8
+        addi $s0, $s0, 8
+        addi $s1, $s1, 8  # set pixel offsets
         
+        la $t9, RED
+        lw $t9, 0($t9)  # $t9 = red
+        
+        
+        la $t0, UserDeck
+        add $t0, $t0, $s6
+        lw $t0, 0($t0)
+        
+        addi $t1, $zero, 2
+        beq $t0, $t1, num_fourteen
+        addi $t1, $zero, 3
+        beq $t0, $t1, num_fourteen
+        addi $t1, $zero, 4
+        beq $t0, $t1, num_fourteen
+        addi $t1, $zero, 5
+        beq $t0, $t1, num_fourteen
+        addi $t1, $zero, 6
+        beq $t0, $t1, num_fourteen
+        addi $t1, $zero, 7
+        beq $t0, $t1, num_fourteen
+        addi $t1, $zero, 8
+        beq $t0, $t1, num_fourteen
+        addi $t1, $zero, 9
+        beq $t0, $t1, num_fourteen
+        addi $t1, $zero, 10
+        beq $t0, $t1, num_fourteen
+        addi $t1, $zero, 11
+        beq $t0, $t1, num_fourteen
+        addi $t1, $zero, 12
+        beq $t0, $t1, num_fourteen
+        addi $t1, $zero, 13
+        beq $t0, $t1, num_fourteen
+        addi $t1, $zero, 14
+        beq $t0, $t1, num_fourteen
+        #j After
+        
+        num_two:
+            move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+            Go_1:
+                move $t8, $s1
+    	    two_rows_1thru14:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, two_rows_1thru14
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_1
+    	        
+    	    addi $s0, $s0, 26
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+    	    Go_2:
+                move $t8, $s1
+    	    two_rows_27thru40:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, two_rows_27thru40
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_2
+    	        
+    	    addi $s0, $s0, 26
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+    	    Go_3:
+                move $t8, $s1
+    	    two_rows_52thru66:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, two_rows_52thru66
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_3
     	    
+    	        
+    	    addi $s0, $s0, -26
+    	    move $t7, $s0
+    	    addi $t3, $t3, -28
+            li $t5, 0
+            li $t6, 40
+            Go_4:
+                move $t8, $s1
+    	    two_cols_1thru14:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, two_cols_1thru14
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_4
+    	        
+    	    addi $s0, $s0, -26
+    	    move $t7, $s0
+    	    addi $t3, $t3, 28
+    	    addi $s1, $s1, 28
+            li $t5, 0
+            li $t6, 40
+            Go_5:
+                move $t8, $s1
+    	    two_cols_29thru52:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, two_cols_29thru52
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_5
+    	        
+    	    j After
+    	    
+    	    
+    	    
+    	num_three:
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+            Go_6:
+                move $t8, $s1
+    	    three_rows_1thru14:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, three_rows_1thru14
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_6
+    	        
+    	    addi $s0, $s0, 26
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+    	    Go_7:
+                move $t8, $s1
+    	    three_rows_27thru40:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, three_rows_27thru40
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_7
+    	        
+    	    addi $s0, $s0, 26
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+    	    Go_8:
+                move $t8, $s1
+    	    three_rows_52thru66:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, three_rows_52thru66
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_8
+    	    
+    	        
+    	    addi $s0, $s0, -52
+    	    move $t7, $s0
+    	    addi $s1, $s1, 28
+            li $t5, 0
+            li $t6, 66
+            Go_9:
+                move $t8, $s1
+    	    three_cols_29thru52:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, three_cols_29thru52
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_9
+    	        
+    	    j After
+    	    
+    	    
+    	num_four:
+    	    addi $s0, $s0, 26
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+    	    Go_10:
+                move $t8, $s1
+    	    four_rows_27thru40:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, four_rows_27thru40
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_10
+    	        
+    	    addi $s0, $s0, -26
+    	    move $t7, $s0
+    	    addi $s1, $s1, 28
+            li $t5, 0
+            li $t6, 66
+            Go_11:
+                move $t8, $s1
+    	    four_cols_29thru52:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, four_cols_29thru52
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_11
+    	        
+    	    move $t7, $s0
+    	    addi $s1, $s1, -28
+    	    addi $t3, $t3, -28
+            li $t5, 0
+            li $t6, 40
+            Go_12:
+                move $t8, $s1
+    	    four_cols_1thru14:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, four_cols_1thru14
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_12
+    	        
+    	    j After
+    	
+    	
+    	num_five:
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+            Go_13:
+                move $t8, $s1
+    	    five_rows_1thru14:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, five_rows_1thru14
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_13
+    	        
+    	    addi $s0, $s0, 26
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+    	    Go_14:
+                move $t8, $s1
+    	    five_rows_27thru40:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, five_rows_27thru40
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_14
+    	        
+    	    addi $s0, $s0, 26
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+    	    Go_15:
+                move $t8, $s1
+    	    five_rows_52thru66:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, five_rows_52thru66
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_15
+    	    
+    	    addi $s0, $s0, -52
+    	    move $t7, $s0
+    	    addi $t3, $t3, -28
+            li $t5, 0
+            li $t6, 40
+            Go_16:
+                move $t8, $s1
+    	    five_cols_1thru14:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, five_cols_1thru14
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_16
+    	        
+    	    addi $s0, $s0, 26
+    	    move $t7, $s0
+    	    addi $t3, $t3, 28
+    	    addi $s1, $s1, 28
+            li $t5, 0
+            li $t6, 40
+            Go_17:
+                move $t8, $s1
+    	    five_cols_29thru52:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, five_cols_29thru52
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_17
+    	        
+    	    
+    	    j After
+    	    
+    	    
+    	num_six:
+    	    addi $s0, $s0, 26
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+    	    Go_18:
+                move $t8, $s1
+    	    six_rows_27thru40:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, six_rows_27thru40
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_18
+    	        
+    	    addi $s0, $s0, 26
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+    	    Go_19:
+                move $t8, $s1
+    	    six_rows_52thru66:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, six_rows_52thru66
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_19
+    	    
+    	    addi $s0, $s0, -52
+    	    move $t7, $s0
+    	    addi $t3, $t3, -28
+            li $t5, 0
+            li $t6, 66
+            Go_20:
+                move $t8, $s1
+    	    six_cols_1thru14:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, six_cols_1thru14
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_20
+    	        
+    	    addi $s0, $s0, 26
+    	    move $t7, $s0
+    	    addi $t3, $t3, 28
+    	    addi $s1, $s1, 28
+            li $t5, 0
+            li $t6, 40
+            Go_21:
+                move $t8, $s1
+    	    six_cols_29thru52:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, six_cols_29thru52
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_21
+    	    
+    	    j After
+    	
+    	
+    	num_seven:
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+            Go_22:
+                move $t8, $s1
+    	    seven_rows_1thru14:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, seven_rows_1thru14
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_22
+    	    
+    	        
+    	    move $t7, $s0
+    	    addi $s1, $s1, 28
+            li $t5, 0
+            li $t6, 66
+            Go_23:
+                move $t8, $s1
+    	    seven_cols_29thru52:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, seven_cols_29thru52
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_23
+    	        
+    	    j After
+    	
+    	    
+    	num_eight:
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+            Go_24:
+                move $t8, $s1
+    	    eight_rows_1thru14:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, eight_rows_1thru14
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_24
+    	        
+    	    addi $s0, $s0, 26
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+    	    Go_25:
+                move $t8, $s1
+    	    eight_rows_27thru40:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, eight_rows_27thru40
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_25
+    	        
+    	    addi $s0, $s0, 26
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+    	    Go_26:
+                move $t8, $s1
+    	    eight_rows_52thru66:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, eight_rows_52thru66
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_26
+    	    
+    	    addi $s0, $s0, -52
+    	    move $t7, $s0
+    	    addi $t3, $t3, -28
+            li $t5, 0
+            li $t6, 66
+            Go_27:
+                move $t8, $s1
+    	    eight_cols_1thru14:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, eight_cols_1thru14
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_27
+    	        
+    	    move $t7, $s0
+    	    addi $t3, $t3, 28
+    	    addi $s1, $s1, 28
+            li $t5, 0
+            li $t6, 66
+            Go_28:
+                move $t8, $s1
+    	    eight_cols_29thru52:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, eight_cols_29thru52
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_28
+    	        
+    	    
+    	    j After
+    	    
+    	    
+    	num_nine:
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+            Go_29:
+                move $t8, $s1
+    	    nine_rows_1thru14:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, nine_rows_1thru14
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_29
+    	        
+    	    addi $s0, $s0, 26
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+    	    Go_30:
+                move $t8, $s1
+    	    nine_rows_27thru40:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, nine_rows_27thru40
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_30
+    	        
+    	    addi $s0, $s0, 26
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+    	    Go_31:
+                move $t8, $s1
+    	    nine_rows_52thru66:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, nine_rows_52thru66
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_31
+    	    
+    	    addi $s0, $s0, -52
+    	    move $t7, $s0
+    	    addi $t3, $t3, -28
+            li $t5, 0
+            li $t6, 40
+            Go_32:
+                move $t8, $s1
+    	    nine_cols_1thru14:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, nine_cols_1thru14
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_32
+    	        
+    	    move $t7, $s0
+    	    addi $t3, $t3, 28
+    	    addi $s1, $s1, 28
+            li $t5, 0
+            li $t6, 66
+            Go_33:
+                move $t8, $s1
+    	    nine_cols_29thru52:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, nine_cols_29thru52
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_33
+    	        
+    	    
+    	    j After
+    	    
+    	num_eleven:
+    	    addi $s0, $s0, 52
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+    	    Go_34:
+                move $t8, $s1
+    	    eleven_rows_52thru66:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, eleven_rows_52thru66
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_34
+    	        
+    	    addi $s0, $s0, -52
+    	    move $t7, $s0
+    	    addi $s1, $s1, 28
+            li $t5, 0
+            li $t6, 66
+            Go_35:
+                move $t8, $s1
+    	    eleven_cols_29thru52:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, eleven_cols_29thru52
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_35
+    	        
+    	    
+    	    j After
+    	    
+    	    
+    	num_fourteen:
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+            Go_36:
+                move $t8, $s1
+    	    fourteen_rows_1thru14:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, fourteen_rows_1thru14
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_36
+    	        
+    	    addi $s0, $s0, 26
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+    	    Go_37:
+                move $t8, $s1
+    	    fourteen_rows_27thru40:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, fourteen_rows_27thru40
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_37
+    	        
+    	    
+    	    addi $s0, $s0, -26
+    	    move $t7, $s0
+    	    addi $t3, $t3, -28
+            li $t5, 0
+            li $t6, 66
+            Go_38:
+                move $t8, $s1
+    	    fourteen_cols_1thru14:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, fourteen_cols_1thru14
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_38
+    	        
+    	    move $t7, $s0
+    	    addi $t3, $t3, 28
+    	    addi $s1, $s1, 28
+            li $t5, 0
+            li $t6, 66
+            Go_39:
+                move $t8, $s1
+    	    fourteen_cols_29thru52:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, fourteen_cols_29thru52
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_39
+    	        
+    	    
+    	    j After
+    	    
+    	    
+    	After:
