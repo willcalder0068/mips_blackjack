@@ -12,20 +12,29 @@
     NewLine: .asciiz "\n"
     InitialMessage1: .asciiz "YOUR STARTING CHIP COUNT: 1000 \n"
     InitialMessage2: .asciiz "Enter your wager: "
+    FaultyWager: .asciiz "Insufficient funds, try again. \n"
+    HSDP: .asciiz "Press 'h' to hit, 's' to stand, 'p' to split, or 'd' to double: "
+    HSD: .asciiz "Press 'h' to hit, 's' to stand, or 'd' to double: "
    
     .align 2
     BaseDeck: .space 208
-    .align 2
     UserDeck: .space 208
     DeckFlags: .space 52
-    .align 2
     UserBust1: .word 0
     UserBust2: .word 0
     DealerBust: .word 0
+    UserAceCount1: .word 0
+    UserAceCount2: .word 0
+    DealerAceCount: .word 0
+    CardValue: .word 0
+    Card1: .word 0
+    
+    Bank: .word 1000
    
 .text
 .globl main
 main:
+    li $s6, -4  # deck index stored in $s6
     la $s7, FrameBuffer  # $s7 = base addr of frame buffer
     ## $s7 CANNOT UNDER ANY CIRCUMSTANCES BE OVERRIDDEN / OVERWRITTEN
 
@@ -201,23 +210,23 @@ main:
 
 
         # Print user deck
-        la $a0, NewLine
-        li $v0, 4
-        syscall
-        la $t0, UserDeck
-        li $t1, 0
-        li $t4, 52
-        print_loop:
-            mul $t2, $t1, 4
-            add $t3, $t0, $t2
-            lw  $a0, 0($t3)
-            li  $v0, 1
-            syscall
-            li  $a0, 32  # ascii for space
-            li  $v0, 11
-            syscall
-            addi $t1, $t1, 1
-            blt  $t1, $t4, print_loop
+        #la $a0, NewLine
+        #li $v0, 4
+        #syscall
+        #la $t0, UserDeck
+        #li $t1, 0
+        #li $t4, 52
+        #print_loop:
+            #mul $t2, $t1, 4
+            #add $t3, $t0, $t2
+            #lw  $a0, 0($t3)
+            #li  $v0, 1
+            #syscall
+            #li  $a0, 32  # ascii for space
+            #li  $v0, 11
+            #syscall
+            #addi $t1, $t1, 1
+            #blt  $t1, $t4, print_loop
                
     # Make the poker table on the bitmap             
     poker_table:
@@ -260,6 +269,66 @@ main:
             blt  $s0, $t7, increment_row_1
         
         
+        initial_deal:
+            li $v0, 5
+            syscall
+            la $t0, Bank
+            lw $t0, 0($t0)
+            ble $v0, $t0, Skip1
+                li $v0, 4
+                la $a0, FaultyWager
+                syscall
+                la $a0, InitialMessage2
+                syscall
+                j initial_deal
+            Skip1:
+                move $s3, $v0
+            
+        
+            la $s5, UserBust1
+            la $s4, UserAceCount1
+            li $s1, 183
+            li $s0, 144
+            jal draw_card
+            
+            la $t0, Card1
+            la $t1, CardValue
+            lw $t1, 0($t1)
+            sw $t1, 0($t0)
+            
+            li $s1, 263
+            li $s0, 144
+            jal draw_card
+            
+            la $t0, Card1
+            lw $t0, 0($t0)
+            la $t1, CardValue
+            lw $t1, 0($t1)
+            bne $t0, $t1, Skip2
+                li $v0, 4
+    		la $a0, HSDP
+    		syscall
+    		j Skip3
+            Skip2:
+                li $v0, 4
+                la $a0, HSD
+                syscall
+            Skip3:
+            
+            la $s5, DealerBust
+            la $s4, DealerAceCount
+            li $s1, 256
+            li $s0, 22
+            jal draw_card
+            
+            
+            
+            j Done
+            # Track busts to see if the user can hit / stand or has lost already
+            # Split logic
+            # Double logic
+            
+            
         
         
         
@@ -281,11 +350,14 @@ main:
         
         
         
-addi $s1, $zero, 100
-addi $s0, $zero, 100
-li $s6, -4  # deck index stored in $s6
-# Top left corner of card: x value stored in $s1, y value stored in $s0
+        
+#addi $s1, $zero, 100
+#addi $s0, $zero, 100
+# Top left corner of card: x value stored in $s1, y value stored in $s0, bust addr stored in $s5, ace count addr in $s4
 draw_card:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+
     addi $s6, $s6, 4  # increment the card index count
 
     li $t0, 66  # card width
@@ -351,34 +423,41 @@ draw_card:
         lw $t0, 0($t0)
         
         addi $t1, $zero, 2
-        beq $t0, $t1, num_fourteen
+        beq $t0, $t1, num_two
         addi $t1, $zero, 3
-        beq $t0, $t1, num_fourteen
+        beq $t0, $t1, num_three
         addi $t1, $zero, 4
-        beq $t0, $t1, num_fourteen
+        beq $t0, $t1, num_four
         addi $t1, $zero, 5
-        beq $t0, $t1, num_fourteen
+        beq $t0, $t1, num_five
         addi $t1, $zero, 6
-        beq $t0, $t1, num_fourteen
+        beq $t0, $t1, num_six
         addi $t1, $zero, 7
-        beq $t0, $t1, num_fourteen
+        beq $t0, $t1, num_seven
         addi $t1, $zero, 8
-        beq $t0, $t1, num_fourteen
+        beq $t0, $t1, num_eight
         addi $t1, $zero, 9
-        beq $t0, $t1, num_fourteen
+        beq $t0, $t1, num_nine
         addi $t1, $zero, 10
-        beq $t0, $t1, num_fourteen
+        beq $t0, $t1, num_ten
         addi $t1, $zero, 11
-        beq $t0, $t1, num_fourteen
+        beq $t0, $t1, num_eleven
         addi $t1, $zero, 12
-        beq $t0, $t1, num_fourteen
+        beq $t0, $t1, num_twelve
         addi $t1, $zero, 13
-        beq $t0, $t1, num_fourteen
+        beq $t0, $t1, num_thirteen
         addi $t1, $zero, 14
         beq $t0, $t1, num_fourteen
-        #j After
         
         num_two:
+            addi $t0, $zero, 2
+            lw $t1, 0($s5)
+            add $t1, $t1, $t0
+            sw $t1, 0($s5)
+            
+            la $t2, CardValue
+            sw $t0, 0($t2)
+        
             move $t7, $s0
             li $t5, 0
             li $t6, 14
@@ -482,7 +561,15 @@ draw_card:
     	    
     	    
     	num_three:
-    	    move $t7, $s0
+    	    addi $t0, $zero, 3
+            lw $t1, 0($s5)
+            add $t1, $t1, $t0
+            sw $t1, 0($s5)
+            
+            la $t2, CardValue
+            sw $t0, 0($t2)
+        
+            move $t7, $s0
             li $t5, 0
             li $t6, 14
             Go_6:
@@ -563,7 +650,15 @@ draw_card:
     	    
     	    
     	num_four:
-    	    addi $s0, $s0, 26
+    	    addi $t0, $zero, 4
+            lw $t1, 0($s5)
+            add $t1, $t1, $t0
+            sw $t1, 0($s5)
+            
+            la $t2, CardValue
+            sw $t0, 0($t2)
+        
+            addi $s0, $s0, 26
     	    move $t7, $s0
             li $t5, 0
             li $t6, 14
@@ -626,7 +721,15 @@ draw_card:
     	
     	
     	num_five:
-    	    move $t7, $s0
+    	    addi $t0, $zero, 5
+            lw $t1, 0($s5)
+            add $t1, $t1, $t0
+            sw $t1, 0($s5)
+            
+            la $t2, CardValue
+            sw $t0, 0($t2)
+        
+            move $t7, $s0
             li $t5, 0
             li $t6, 14
             Go_13:
@@ -728,7 +831,15 @@ draw_card:
     	    
     	    
     	num_six:
-    	    addi $s0, $s0, 26
+    	    addi $t0, $zero, 6
+            lw $t1, 0($s5)
+            add $t1, $t1, $t0
+            sw $t1, 0($s5)
+            
+            la $t2, CardValue
+            sw $t0, 0($t2)
+        
+            addi $s0, $s0, 26
     	    move $t7, $s0
             li $t5, 0
             li $t6, 14
@@ -811,7 +922,15 @@ draw_card:
     	
     	
     	num_seven:
-    	    move $t7, $s0
+    	    addi $t0, $zero, 7
+            lw $t1, 0($s5)
+            add $t1, $t1, $t0
+            sw $t1, 0($s5)
+            
+            la $t2, CardValue
+            sw $t0, 0($t2)
+        
+            move $t7, $s0
             li $t5, 0
             li $t6, 14
             Go_22:
@@ -853,7 +972,15 @@ draw_card:
     	
     	    
     	num_eight:
-    	    move $t7, $s0
+    	    addi $t0, $zero, 8
+            lw $t1, 0($s5)
+            add $t1, $t1, $t0
+            sw $t1, 0($s5)
+            
+            la $t2, CardValue
+            sw $t0, 0($t2)
+        
+            move $t7, $s0
             li $t5, 0
             li $t6, 14
             Go_24:
@@ -954,7 +1081,15 @@ draw_card:
     	    
     	    
     	num_nine:
-    	    move $t7, $s0
+    	    addi $t0, $zero, 9
+            lw $t1, 0($s5)
+            add $t1, $t1, $t0
+            sw $t1, 0($s5)
+            
+            la $t2, CardValue
+            sw $t0, 0($t2)
+        
+            move $t7, $s0
             li $t5, 0
             li $t6, 14
             Go_29:
@@ -1052,9 +1187,127 @@ draw_card:
     	        
     	    
     	    j After
+    	num_ten:
+    	    addi $t0, $zero, 10
+            lw $t1, 0($s5)
+            add $t1, $t1, $t0
+            sw $t1, 0($s5)
+            
+            la $t2, CardValue
+            sw $t0, 0($t2)
+        
+            move $t7, $s0
+    	    addi $t3, $t3, -32
+            li $t5, 0
+            li $t6, 66
+            Go_110:
+                move $t8, $s1
+    	    ten_cols_1thru10:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, ten_cols_1thru10
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_110
+    	        
+    	    move $t7, $s0
+    	    addi $t3, $t3, 16
+    	    addi $s1, $s1, 16
+            li $t5, 0
+            li $t6, 66
+            Go_111:
+                move $t8, $s1
+    	    ten_cols_17thru26:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, ten_cols_17thru26
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_111
+    	    
+    	    move $t7, $s0
+    	    addi $t3, $t3, 16
+    	    addi $s1, $s1, 16
+            li $t5, 0
+            li $t6, 66
+            Go_112:
+                move $t8, $s1
+    	    ten_cols_33thru42:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, ten_cols_33thru42
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_112
+    	        
+    	    move $t7, $s0
+    	    addi $s1, $s1, -6
+            li $t5, 0
+            li $t6, 14
+            Go_113:
+                move $t8, $s1
+    	    ten_rows_1thru14:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, ten_rows_1thru14
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_113
+    	        
+    	    addi $s0, $s0, 52
+    	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+    	    Go_114:
+                move $t8, $s1
+    	    ten_rows_52thru66:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, ten_rows_52thru66
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_114
+    	        
+    	    j After
+    	    
     	    
     	num_eleven:
-    	    addi $s0, $s0, 52
+    	    addi $t0, $zero, 10
+            lw $t1, 0($s5)
+            add $t1, $t1, $t0
+            sw $t1, 0($s5)
+            
+            la $t2, CardValue
+            addi $t0, $t0, 1
+            sw $t0, 0($t2)
+            addi $t0, $t0, -1
+        
+            addi $s0, $s0, 52
     	    move $t7, $s0
             li $t5, 0
             li $t6, 14
@@ -1097,8 +1350,230 @@ draw_card:
     	    j After
     	    
     	    
-    	num_fourteen:
+    	num_twelve:
+    	    addi $t0, $zero, 10
+            lw $t1, 0($s5)
+            add $t1, $t1, $t0
+            sw $t1, 0($s5)
+            
+            la $t2, CardValue
+            addi $t0, $t0, 2
+            sw $t0, 0($t2)
+            addi $t0, $t0, -2
+        
+            move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+            Go_105:
+                move $t8, $s1
+    	    twelve_rows_1thru14:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, twelve_rows_1thru14
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_105
+    	        
+    	    addi $s0, $s0, 52
     	    move $t7, $s0
+            li $t5, 0
+            li $t6, 14
+    	    Go_106:
+                move $t8, $s1
+    	    twelve_rows_52thru66:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, twelve_rows_52thru66
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_106
+    	    
+    	    addi $s0, $s0, -52
+    	    move $t7, $s0
+    	    addi $t3, $t3, -28
+            li $t5, 0
+            li $t6, 66
+            Go_107:
+                move $t8, $s1
+    	    twelve_cols_1thru14:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, twelve_cols_1thru14
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_107
+    	        
+    	    move $t7, $s0
+    	    addi $t3, $t3, 28
+    	    addi $s1, $s1, 28
+            li $t5, 0
+            li $t6, 66
+            Go_108:
+                move $t8, $s1
+    	    twelve_cols_29thru52:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, twelve_cols_29thru52
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_108
+    	        
+    	    addi $s0, $s0, 42
+    	    move $t7, $s0
+    	    addi $t3, $t3, -17
+    	    addi $s1, $s1, -11
+            li $t5, 0
+            li $t6, 30
+            Go_109:
+                move $t8, $s1
+    	    twelve_cols_17thru25:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, twelve_cols_17thru25
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_109
+    	     
+    	    j After
+    	
+    	    
+    	num_thirteen:
+    	    addi $t0, $zero, 10
+            lw $t1, 0($s5)
+            add $t1, $t1, $t0
+            sw $t1, 0($s5)
+            
+            la $t2, CardValue
+            addi $t0, $t0, 3
+            sw $t0, 0($t2)
+            addi $t0, $t0, -3
+        
+            move $t7, $s0
+    	    addi $t3, $t3, -30
+            li $t5, 0
+            li $t6, 66
+            Go_130:
+                move $t8, $s1
+    	    thirteen_cols_1thru12:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, thirteen_cols_1thru12
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_130
+    	        
+    	    addi $s0, $s0, 40
+    	    move $t7, $s0
+    	    addi $t3, $t3, 20
+    	    addi $s1, $s1, 22
+            li $t5, 0
+            li $t6, 26
+            Go_131:
+                move $t8, $s1
+    	    thirteen_cols_23thru32:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, thirteen_cols_23thru32
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_131
+    	        
+    	    addi $s0, $s0, -40
+    	    move $t7, $s0
+    	    addi $t3, $t3, 10
+    	    addi $s1, $s1, 10
+            li $t5, 0
+            li $t6, 26
+            Go_132:
+                move $t8, $s1
+    	    thirteen_cols_33thru42:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, thirteen_cols_33thru42
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_132
+    	        
+    	    addi $s0, $s0, 26
+    	    move $t7, $s0
+    	    addi $s1, $s1, -32 
+            li $t5, 0
+            li $t6, 14
+    	    Go_133:
+                move $t8, $s1
+    	    thirteen_rows_27thru40:
+    	        mul $t0, $t7, 512
+    	        add $t1, $t0, $t8  # curr pixel
+    	        mul $t1, $t1, 4
+    	        add $t2, $t1, $s7  # curr addr
+    	        sw $t9, 0($t2)  # make it red
+    	        addi $t8, $t8, 1
+    	        blt $t8, $t3, thirteen_rows_27thru40
+    	        
+    	        addi $t5, $t5, 1
+    	        addi $t7, $t7, 1
+    	        blt $t5, $t6, Go_133
+    	       
+    	    j After
+    	    
+    	    
+    	    
+    	num_fourteen:
+    	    addi $t0, $zero, 11
+            lw $t1, 0($s5)
+            add $t1, $t1, $t0
+            sw $t1, 0($s5)
+            
+            la $t2, CardValue
+            addi $t0, $t0, 3
+            sw $t0, 0($t2)
+            addi $t0, $t0, -3
+            
+    	    lw $t1, 0($s4)
+    	    addi $t1, $t1, 1
+    	    sw $t1, 0($s4)
+        
+            move $t7, $s0
             li $t5, 0
             li $t6, 14
             Go_36:
@@ -1178,6 +1653,13 @@ draw_card:
     	        
     	    
     	    j After
-    	    
-    	    
+    	
+  
     	After:
+    	    lw $ra, 0($sp)
+    	    addi $sp, $sp, 4
+    	    jr $ra
+    	    
+    	    
+    	    
+    	Done:
