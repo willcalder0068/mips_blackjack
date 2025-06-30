@@ -9,10 +9,9 @@
     WHITE: .word 0x00FFFFFF
     BROWN: .word 0x006B3410
    
-    InitialMessage1: .asciiz "Before each hand, enter your wager. \n"
-    InitialMessage2: .asciiz "Press 'h' to hit, 's' to stand, 'p' to split, and 'd' to double. \n"
-    InitialMessage3: .asciiz "\n"
-    InitialMessage4: .asciiz "YOUR STARTING CHIP COUNT: 1000 \n"
+    NewLine: .asciiz "\n"
+    InitialMessage1: .asciiz "YOUR STARTING CHIP COUNT: 1000 \n"
+    InitialMessage2: .asciiz "Enter your wager: "
    
     .align 2
     BaseDeck: .space 208
@@ -23,22 +22,21 @@
 .text
 .globl main
 main:
+    la $s7, FrameBuffer  # $s7 = base addr of frame buffer
+    addi $s6, $zero, 0  # USER BUST VALUE 1
+    addi $s5, $zero, 0  # USER BUST VALUE 2 (Used if the hand is split)
+    addi $s4, $zero, 0  # DEALER BUST VALUE
+    ## $s4-7 CANNOT UNDER ANY CIRCUMSTANCES BE OVERRIDDEN / OVERWRITTEN
 
-initialize:
-    # Print Initial Messages
-    li $v0, 4
-    la $a0, InitialMessage1
-    syscall
-    la $a0, InitialMessage2
-    syscall
-    la $a0, InitialMessage3
-    syscall
-    la $a0, InitialMessage4
-    syscall
-    la $a0, InitialMessage3
-    syscall
+    initialize:
+        # Print Initial Messages
+    	li $v0, 4
+    	la $a0, InitialMessage1
+    	syscall
+    	la $a0, InitialMessage2
+    	syscall
 
-    shuffle_decks:
+    shuffle_deck:
         la $t0, BaseDeck  # load base addr of the space reserved for the base deck
         addi $t1, $zero, 2
         sw $t1, 0($t0)
@@ -173,91 +171,167 @@ initialize:
         sb $zero, 51($t0) # initialize all deck flags to 0
         
         
-        addi $s7, $zero, 0
-        addi $s6, $zero, 204
+        addi $t7, $zero, 0
+        addi $t8, $zero, 204
         shuffle_loop:
             li $v0, 42 # generate random integer
             li $a0, 0
             li $a1, 52 # between 0 and 51
             syscall
-            move $t9, $a0 # store in $t9
+            move $t9, $a0 # store it in $t9
             
             la $t0, DeckFlags
             add $t1, $t0, $t9 # random index from deck flags stored in $t1
             lb $t2, 0($t1) # load random bit from deck flags
             bne $t2, $zero, shuffle_loop # try again if we have already used it
-            li $t3, 1
-            sb $t3, 0($t1) # mark index as used
+            li $t2, 1
+            sb $t2, 0($t1) # mark index as used
             
             la $t0, BaseDeck
-            mul $t3, $t9, 4
-            add $t4, $t0, $t3 # store the random index of our base deck in $t4
-            lw $s0, 0($t4) # store the random value from our base deck in $s0
+            mul $t2, $t9, 4
+            add $t3, $t0, $t2 # store the random index of our base deck in $t3
+            lw $t4, 0($t3) # store the random value from our base deck in $t4
             
             la $t0, UserDeck
-            add $t4, $t0, $s7 # start at the beginning of the user deck and ascend
-            sw $s0, 0($t4) # store the random value from the base deck in the user deck
-            addi $s7, $s7, 4
-            ble $s7, $s6, shuffle_loop
+            add $t3, $t0, $t7 # start at the beginning of the user deck and ascend
+            sw $t4, 0($t3) # store the random value from the base deck in the user deck
+            addi $t7, $t7, 4
+            ble $t7, $t8, shuffle_loop
 
 
-            # Print user deck
-            la $t0, UserDeck
-            li $t1, 0
-            li $t4, 52
-            print_loop:
-                mul $t2, $t1, 4
-                add $t3, $t0, $t2
-                lw  $a0, 0($t3)
-                li  $v0, 1
-                syscall
-                li  $a0, 32  # ascii for space
-                li  $v0, 11
-                syscall
-                addi $t1, $t1, 1
-                blt  $t1, $t4, print_loop
-                
+        # Print user deck
+        la $a0, NewLine
+        li $v0, 4
+        syscall
+        la $t0, UserDeck
+        li $t1, 0
+        li $t4, 52
+        print_loop:
+            mul $t2, $t1, 4
+            add $t3, $t0, $t2
+            lw  $a0, 0($t3)
+            li  $v0, 1
+            syscall
+            li  $a0, 32  # ascii for space
+            li  $v0, 11
+            syscall
+            addi $t1, $t1, 1
+            blt  $t1, $t4, print_loop
+               
+    # Make the poker table on the bitmap             
+    poker_table:
+        li $t0, 512  # screen width
+        li $t1, 256  # screen height
+        mul $t2, $t0, $t1  # total pixels = width * height
 
+        la $t0, BROWN
+        lw $t0, 0($t0)  # $t3 = brown
+        la $t1, GREEN
+        lw $t1, 0($t1)  # $t4 = green
 
-    li $t0, 512  # screen width
-    li $t1, 256  # screen height
-    mul $t6, $t0, $t1  # total pixels = width * height
-    li $t2, 12  # border thickness
-    la $s7, FrameBuffer  # $s7 = base addr of frame buffer
+        li $t3, 0  # i = 0; i will iterate across every pixel on the map
+        
+        fill_brown:
+            mul $t4, $t3, 4  # each pixel uses 4 bytes; offset = i * 4
+            add $t5, $s7, $t4  # addr = frameBuffer + offset
+            sw  $t0, 0($t5)  # store brown in $t8; holds the addr of our current pixel
+            addi $t3, $t3, 1  # i += 1
+            blt  $t3, $t2, fill_brown
 
-    la $t3, BROWN
-    lw $t3, 0($t3)  # $t3 = brown
-    la $t4, GREEN
-    lw $t4, 0($t4)  # $t4 = green
-
-    li $t5, 0  # i = 0; i will iterate across every pixel on the map
-    fill_brown:
-        mul $t7, $t5, 4  # each pixel uses 4 bytes; offset = i * 4
-        add $t8, $s7, $t7  # addr = frameBuffer + offset
-        sw  $t3, 0($t8)  # store brown in $t8; holds the addr of our current pixel
-        addi $t5, $t5, 1  # i += 1
-        blt  $t5, $t6, fill_brown
-
-    # We leave a 12 pixel border as brown and color over the rest with green
-    li $s2, 500  # max x = 512 - 12
-    li $s3, 244  # max y = 256 - 12
+    	# We leave a 12 pixel border as brown and color over the rest with green
+    	li $t6, 500  # max x = 512 - 12
+    	li $t7, 244  # max y = 256 - 12
     
-    li $s0, 12  # y = 12; y will be incremented as we move to the next row
-    increment_row:
-        li $s1, 12  # x = 12; x needs to be incremented across each row
-        mul $t9, $s0, 512  # first pixel of row = y * width
+    	li $s0, 12  # y = 12; y will be incremented as we move to the next row
+    	increment_row_1:
+            li $s1, 12  # x = 12; x needs to be incremented across each row
+            mul $t8, $s0, 512  # first pixel of row = y * width
 
-        fill_row:
-            add $t6, $t9, $s1  # curr pixel index = (y * width) + x
-            mul $t6, $t6, 4  # offset = index * 4
-            add $t7, $s7, $t6  # addr = frameBuffer + offset
-            sw  $t4, 0($t7)  # store green in $t7; holds the addr of our current pixel
-            addi $s1, $s1, 1  # x += 1
-            blt  $s1, $s2, fill_row
+            fill_row_1:
+                add $t3, $t8, $s1  # curr pixel index = (y * width) + x
+                mul $t3, $t3, 4  # offset = index * 4
+            	add $t4, $s7, $t3  # addr = frameBuffer + offset
+            	sw  $t1, 0($t4)  # store green in $t7; holds the addr of our current pixel
+            	addi $s1, $s1, 1  # x += 1
+            	blt  $s1, $t6, fill_row_1
 
-        addi $s0, $s0, 1  # y += 1
-        blt  $s0, $s3, increment_row
-            
-            
+            addi $s0, $s0, 1  # y += 1
+            blt  $s0, $t7, increment_row_1
         
         
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+addi $s1, $zero, 100
+addi $s0, $zero, 100
+# Top left corner of card: x value stored in $s1, y value stored in $s0
+draw_card:
+
+    li $t0, 66  # card width
+    li $t1, 90  # card height
+    add $t3, $s1, $t0  # right edge of the card
+    add $t4, $s0, $t1  # bottom edge of the card
+    
+    la $t9, BLACK
+    lw $t9, 0($t9)  # $t9 = black
+    
+    move $t0, $s0  # preserve original pixel value
+    increment_row_2:
+    	mul $t2, $t0, 512  # store first pixel of row in $t5
+    	move $t1, $s1  # reset $t7 as the original x value for each row
+    	fill_row_2:
+    	    add $t8, $t2, $t1
+    	    mul $t8, $t8, 4
+    	    add $t8, $s7, $t8  # acess the addr of our pixel
+    	    sw $t9, 0($t8)  # make it black
+    	    addi $t1, $t1, 1  # x += 1
+    	    blt $t1, $t3, fill_row_2
+    	
+    	addi $t0, $t0, 1  # y += 1
+    	blt $t0, $t4, increment_row_2
+    	
+    addi $t3, $t3, -4  # set border thickness
+    addi $t4, $t4, -4
+    addi $s0, $s0, 4
+    addi $s1, $s1, 4
+    
+    la $t9, WHITE
+    lw $t9, 0($t9)  # $t9 = white
+    
+    move $t0, $s0  # preserve original pixel value
+    increment_row_3:
+    	mul $t2, $t0, 512  # store first pixel of row in $t5
+    	move $t1, $s1  # reset $t7 as the original x value for each row
+    	fill_row_3:
+    	    add $t8, $t2, $t1
+    	    mul $t8, $t8, 4
+    	    add $t8, $s7, $t8  # acess the addr of our pixel
+    	    sw $t9, 0($t8)  # make it black
+    	    addi $t1, $t1, 1  # x += 1
+    	    blt $t1, $t3, fill_row_3
+    	
+    	addi $t0, $t0, 1  # y += 1
+    	blt $t0, $t4, increment_row_3
+    	
+    # Pick a card form the deck, remove it, draw it, increment the user / dealer bust value
+    draw_card_value:
+        
+    	    
