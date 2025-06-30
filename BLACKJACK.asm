@@ -18,6 +18,8 @@
     FaultyWager: .asciiz "Insufficient funds, try again. \n"
     HSDP: .asciiz "Press 'h' to hit, 's' to stand, 'p' to split, or 'd' to double: "
     HSD: .asciiz "Press 'h' to hit, 's' to stand, or 'd' to double: "
+    HSP: .asciiz "Press 'h' to hit, 's' to stand, or 'p' to split:"
+    HS: .asciiz "Press 'h' to hit or 's' to stand:"
    
     .align 2
     BaseDeck: .space 208
@@ -272,7 +274,7 @@ main:
                 j initial_deal  # try again
             wager_ifelse:
                 la $t0, Wager
-                lw $v0, 0($t0)  # store the wager amount
+                sw $v0, 0($t0)  # store the wager amount from input
             
             la $s5, DealerBust
             la $s4, DealerAceCount
@@ -298,23 +300,39 @@ main:
             jal draw_card  # second user-card
             # arguments: bust count and ace count (same), x - $s1 - and y - $s2 - coordinates (top left corner)
             
-            la $t0, Card1
+            la $t0, Card1  # get the first card type
             lw $t0, 0($t0)
             la $t1, CardType  # get the second CardType
             lw $t1, 0($t1)
-            bne $t0, $t1, pair_ifelse1  # if the user has a pair, they can split
-                li $v0, 4
-    		la $a0, HSDP  # hit, stand, double, split
-    		syscall
-    		j pair_ifelse2
-            pair_ifelse1:
-                li $v0, 4
-                la $a0, HSD  # hit, stand, double
-                syscall
-            pair_ifelse2:
             
+            la $t2, Wager  # get the wager * 2
+            lw $t2, 0($t2)
+            mul $t2, $t2, 2
+            la $t3, Bank  # get the bank
+            lw $t3, 0($t3)
             
-            j Done
+            bne $t0, $t1, pair_ifelse  # if the user has a pair, they can split
+                blt $t3, $t2, double_ifelse1  # if the user has sufficient funds, they can double
+                    li $v0, 4
+    		    la $a0, HSDP  # hit, stand, double, split
+    		    syscall
+    		j Done
+                double_ifelse1:  # if the user does not have sufficient funds, they cant double
+    		    li $v0, 4
+    		    la $a0, HSP
+    		    syscall
+    		j Done
+            pair_ifelse:  # if the user does not have a pair, they cant split
+                blt $t3, $t2, double_ifelse2  # if the user has sufficient funds, they can double
+                    li $v0, 4
+    		    la $a0, HSD  # hit, stand, double
+    		    syscall
+    		j Done
+                double_ifelse2:  # if the user does not have sufficient funds, they cant double
+    		    li $v0, 4
+    		    la $a0, HS
+    		    syscall
+    		j Done
     
     
     
@@ -329,6 +347,7 @@ main:
     draw_card:
         addi $sp, $sp, -4
         sw $ra, 0($sp)  # store return address on the top of the stack
+        
         addi $s6, $s6, 4  # increment the card index count as a card is going to be taken out
         li $t0, 140
         blt $s6, $t0, reshuffle_bool  # if we have used more than 34 cards, flip reshuffle bool to true
