@@ -20,7 +20,6 @@
     
     HSDP: .asciiz "\nPress 'h' to hit, 's' to stand, 'p' to split, or 'd' to double down: "
     HSD: .asciiz "\nPress 'h' to hit, 's' to stand, or 'd' to double down: "
-    HSP: .asciiz "\nPress 'h' to hit, 's' to stand, or 'p' to split: "
     HS: .asciiz "\nPress 'h' to hit or 's' to stand: "
     
     WinMessage: .asciiz "\nYou Win!\n YOUR CHIP COUNT: "
@@ -37,16 +36,20 @@
     BaseDeck: .space 208  # stores unshuffled deck
     UserDeck: .space 208  # stores shuffled deck
     DeckFlags: .space 52  # 52 bool toggles used when filling the shuffled deck
+    
     UserBustAddr1: .word 0  # stores addr of the users card count (over 21 is a bust)
     UserBustAddr2: .word 0  # stores addr of the right hand after the user splits (left hand goes to addr1)
     DealerBustAddr: .word 0  # stores addr of dealers card count
     UserAceCountAddr1: .word 0  # stores addr of user ace count; needed when aces have to go low (from 11 to 1)
     UserAceCountAddr2: .word 0  # if the user splits, this takes the right half (left goes to addr1)
     DealerAceCountAddr: .word 0  # stores addr of dealer ace count
+    
     CardType: .word 0  
     Card1: .word 0  # ^ both used to identify a user pair
+    
     Bank: .word 1000  # chip count
     Wager: .word 0
+    
     ReshuffleBool: .word 0  # toggled when we want to reshuffle (~34 dealt cards)
     DealerOffset: .word 0  # if the dealer has more than 6 cards, we use this to stagger 7, 8, ...
    
@@ -389,11 +392,11 @@ main:
     		    la $a0, HSDP  # hit, stand, double, split
     		    syscall
     		j function_HSDP
-                double_ifelse1:  # if the user does not have sufficient funds, they cant double
+                double_ifelse1:  # if the user does not have sufficient funds, they cant double or split
     		    li $v0, 4
-    		    la $a0, HSP
+    		    la $a0, HS
     		    syscall
-    		j function_HSP
+    		j function_HS
             pair_ifelse:  # if the user does not have a pair, they cant split
                 blt $t5, $t3, double_ifelse2  # if the user has sufficient funds, they can double
                     li $v0, 4
@@ -425,23 +428,6 @@ main:
                 la $a0, HSDP
                 syscall
                 j function_HSDP  # try again
-            function_HSP:
-                li $v0, 12
-                syscall  # read char, store ascii value in $v0
-                
-                li $t0, 'h'
-        	beq $t0, $v0, hit_protocol
-        	li $t0, 's'
-        	beq $t0, $v0, stand_protocol
-                li $t0, 'p'
-                beq $t0, $v0, split_protocol
-                
-                li $v0, 4
-                la $a0, FaultyAction  # faulty action printed after fall through (none of the correct keys used)
-                syscall
-                la $a0, HSP
-                syscall
-                j function_HSP  # try again
             function_HSD:
                 li $v0, 12
                 syscall  # read char, store ascii value in $v0
