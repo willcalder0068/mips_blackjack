@@ -48,7 +48,8 @@
     Card1: .word 0  # ^ both used to identify a user pair
     
     Bank: .word 1000  # chip count
-    Wager: .word 0
+    Wager1: .word 0
+    Wager2: .word 0  # in case of split
     
     ReshuffleBool: .word 0  # toggled when we want to reshuffle (~34 dealt cards)
     DealerOffset: .word 0  # if the dealer has more than 6 cards, we use this to stagger 7, 8, ...
@@ -64,6 +65,8 @@ main:
     	la $a0, InitialMessage1
     	syscall
 
+## Shuffle Block
+##############################################################################################################################################################################
     j shuffle_deck  # first time through, we do not want to run reshuffle
     reshuffle_deck: 
         ## Print previous deck
@@ -80,13 +83,11 @@ main:
             lw  $a0, 0($t3)  # load card type into print slot ($a0)
             li  $v0, 1  # print int
             syscall
-            
             li  $a0, 32  # ascii for space
             li  $v0, 11  # print char
             syscall
-            
             addi $t1, $t1, 1
-            blt  $t1, $t4, print_loop
+            blt  $t1, $t4, print_loop  # loop for every card
             
         li $v0, 4
         la $a0, ReshuffleMessage2
@@ -98,7 +99,7 @@ main:
         li $v0, 1
         la $t0, Bank
         lw $t1, 0($t0)
-        move $a0, $t1
+        move $a0, $t1  # print value in bank
         syscall
             
         la $t0, ReshuffleBool
@@ -108,128 +109,32 @@ main:
         li $s6, -4  # we iterate through this when pulling from our shuffled deck; once it reaches 140 (35 * 4) we toggle a reshuffle
         ## $s6 CANNOT BE OVERRIDDEN / OVERWRITTEN PAST THIS POINT
         
-        # Fill an order deck
+        # Fill an ordered deck
         la $t0, BaseDeck
-        addi $t1, $zero, 2
-        sw $t1, 0($t0)
-        sw $t1, 4($t0)
-        sw $t1, 8($t0)
-        sw $t1, 12($t0)
-        addi $t1, $zero, 3
-        sw $t1, 16($t0)
-        sw $t1, 20($t0)
-        sw $t1, 24($t0)
-        sw $t1, 28($t0)
-        addi $t1, $zero, 4
-        sw $t1, 32($t0)
-        sw $t1, 36($t0)
-        sw $t1, 40($t0)
-        sw $t1, 44($t0)
-        addi $t1, $zero, 5
-        sw $t1, 48($t0)
-        sw $t1, 52($t0)
-        sw $t1, 56($t0)
-        sw $t1, 60($t0)
-        addi $t1, $zero, 6
-        sw $t1, 64($t0)
-        sw $t1, 68($t0)
-        sw $t1, 72($t0)
-        sw $t1, 76($t0)
-        addi $t1, $zero, 7
-        sw $t1, 80($t0)
-        sw $t1, 84($t0)
-        sw $t1, 88($t0)
-        sw $t1, 92($t0)
-        addi $t1, $zero, 8
-        sw $t1, 96($t0)
-        sw $t1, 100($t0)
-        sw $t1, 104($t0)
-        sw $t1, 108($t0)
-        addi $t1, $zero, 9
-        sw $t1, 112($t0)
-        sw $t1, 116($t0)
-        sw $t1, 120($t0)
-        sw $t1, 124($t0)
-        addi $t1, $zero, 10
-        sw $t1, 128($t0)
-        sw $t1, 132($t0)
-        sw $t1, 136($t0)
-        sw $t1, 140($t0)
-        addi $t1, $zero, 11
-        sw $t1, 144($t0)
-        sw $t1, 148($t0)
-        sw $t1, 152($t0)
-        sw $t1, 156($t0)
-        addi $t1, $zero, 12
-        sw $t1, 160($t0)
-        sw $t1, 164($t0)
-        sw $t1, 168($t0)
-        sw $t1, 172($t0)
-        addi $t1, $zero, 13
-        sw $t1, 176($t0)
-        sw $t1, 180($t0)
-        sw $t1, 184($t0)
-        sw $t1, 188($t0)
-        addi $t1, $zero, 14
-        sw $t1, 192($t0)
-        sw $t1, 196($t0)
-        sw $t1, 200($t0)
-        sw $t1, 204($t0)  # ^ initialize an unshuffled deck with four of each card. 11 = J, 12 = Q, 13 = K, 14 = A
+        li $t1, 2  # deck inputs
+        li $t2, 0  # i = 0
+        li $t3, 4  # four of each card
+        li $t4, 15  # we stop at aces (14)
+        unshuffled_loop:
+            sw $t1, 0($t0)  # load $t1 into the deck
+            addi $t0, $t0, 4  # move to the next index (words i.e. 4 bytes)
+            addi $t2, $t2, 1  # i += 1
+            bne $t2, $t3, unshuffled_loop  # input the same value four times
+            addi $t2, $t2, -4  # reset count
+            addi $t1, $t1, 1  # after four loops increment the input (4 cards of each value)
+            bne $t1, $t4, unshuffled_loop  # once we have put in all of our aces (14) we are done
+        # ^ initialize an unshuffled deck with four of each card. 11 = J, 12 = Q, 13 = K, 14 = A
         
-        # Load base addr of deck flags (booleans for each card; ensures 4 cards of each type will be in the shuffled deck)
+        # Load base addr of deck flags (booleans for each card; ensures 4 cards of each type will be in the shuffled deck
         la $t0, DeckFlags 
-        sb $zero, 0($t0)
-        sb $zero, 1($t0)
-        sb $zero, 2($t0)
-        sb $zero, 3($t0)
-        sb $zero, 4($t0)
-        sb $zero, 5($t0)
-        sb $zero, 6($t0)
-        sb $zero, 7($t0)
-        sb $zero, 8($t0)
-        sb $zero, 9($t0)
-        sb $zero, 10($t0)
-        sb $zero, 11($t0)
-        sb $zero, 12($t0)
-        sb $zero, 13($t0)
-        sb $zero, 14($t0)
-        sb $zero, 15($t0)
-        sb $zero, 16($t0)
-        sb $zero, 17($t0)
-        sb $zero, 18($t0)
-        sb $zero, 19($t0)
-        sb $zero, 20($t0)
-        sb $zero, 21($t0)
-        sb $zero, 22($t0)
-        sb $zero, 23($t0)
-        sb $zero, 24($t0)
-        sb $zero, 25($t0)
-        sb $zero, 26($t0)
-        sb $zero, 27($t0)
-        sb $zero, 28($t0)
-        sb $zero, 29($t0)
-        sb $zero, 30($t0)
-        sb $zero, 31($t0)
-        sb $zero, 32($t0)
-        sb $zero, 33($t0)
-        sb $zero, 34($t0)
-        sb $zero, 35($t0)
-        sb $zero, 36($t0)
-        sb $zero, 37($t0)
-        sb $zero, 38($t0)
-        sb $zero, 39($t0)
-        sb $zero, 40($t0)
-        sb $zero, 41($t0)
-        sb $zero, 42($t0)
-        sb $zero, 43($t0)
-        sb $zero, 44($t0)
-        sb $zero, 45($t0)
-        sb $zero, 46($t0)
-        sb $zero, 47($t0)
-        sb $zero, 48($t0)
-        sb $zero, 49($t0)
-        sb $zero, 50($t0)
-        sb $zero, 51($t0) # ^ initialize all deck flags to 0, indicating their slots are filled
+        li $t1, 0
+        li $t2, 52
+        flag_loop:
+            sb $zero, 0($t0)
+            addi $t0, $t0, 1
+            addi $t1, $t1, 1
+            bne $t1, $t2, flag_loop
+        # ^ initialize all deck flags to 0, indicating their slots are filled
         
         addi $t7, $zero, 0
         addi $t8, $zero, 204  # (51 * 4) -- (bytes to words)
@@ -257,12 +162,12 @@ main:
             sw $t4, 0($t3)  # store the random value from the base deck in the user deck
             addi $t7, $t7, 4
             ble $t7, $t8, shuffle_loop
+##############################################################################################################################################################################
             
-## Initialize Block    
+## Initializer Block    
 ##############################################################################################################################################################################
     # always back the background after shuffling; allow fall through           
     make_background:
-        # reset all of our bust counts, ace counts, and overflow semi-toggle (0 | 33)
         la $t0, UserBustAddr1
         sw $zero, 0($t0)
         la $t0, UserBustAddr2
@@ -277,6 +182,7 @@ main:
         sw $zero, 0($t0) 
         la $t0, DealerOffset
         sw $zero, 0($t0)
+        # reset all of our bust counts, ace counts, and overflow semi-toggle (0 | 33)
     
         la $t0, Bank
         lw $t1, 0($t0)
@@ -305,10 +211,10 @@ main:
     	increment_green_row:
             li $s1, 48  # x = 48 (bytes to words); x needs to be incremented across each row and reset on columns
             mul $t8, $s0, 512  # first pixel of row = y * width
-            mul $t8, $t8, 4  # pixels to addrs (bytes to words)
+            mul $t9, $t8, 4  # pixels to addrs (bytes to words)
 
             fill_row_green:
-                add $t3, $t8, $s1  # curr pixel index = (y * width) + x
+                add $t3, $t9, $s1  # curr pixel index = (y * width) + x
             	add $t4, $s7, $t3  # addr = frameBuffer + offset
             	sw  $t1, 0($t4)  # store green in the addr of our current pixel
             	addi $s1, $s1, 4  # x += 4
@@ -327,7 +233,6 @@ main:
             la $t0, Bank
             lw $t1, 0($t0)
             
-            # give myself infinite chips
             li $t2, 101505
             bne $v0, $t2, creator_special
                 li $t2, 10000000
@@ -338,7 +243,7 @@ main:
             ble $v0, $zero faulty_wager  # if the wager is <= 0, it cant happen
             bgt $v0, $t1, faulty_wager  # if wager is more than the bank, it cant happen
             
-            la $t0, Wager
+            la $t0, Wager1
             sw $v0, 0($t0)  # store the wager amount from input
             j fair_wager
             
@@ -376,40 +281,27 @@ main:
             # arguments: bust count addr and ace count addr(same), x - $s1 - and y - $s0 - coordinates (top left corner)
             
             la $t0, Card1
-            lw $t0, 0($t0)  # ^ get the first card type
-            la $t1, CardType
-            lw $t1, 0($t1)  # ^ get the second CardType
+            lw $t1, 0($t0)  # ^ get the first card type in $t1
+            la $t2, CardType
+            lw $t3, 0($t2)  # ^ get the second CardType in $t3
+            la $t4, Wager1
+            lw $t5, 0($t4)
+            mul $t5, $t5, 2  # get the wager * 2 in $t5; checking for double / split possibility
+            la $t6, Bank
+            lw $t7, 0($t6)  # get the bank in $t7
             
-            la $t2, Wager
-            lw $t3, 0($t2)
-            mul $t3, $t3, 2  # get the wager * 2 in $t3; checking for double possibility
-            la $t4, Bank
-            lw $t5, 0($t4)  # get the bank in $t5
-            
-            bne $t0, $t1, pair_ifelse  # if the user has a pair, they can split
-                blt $t5, $t3, double_ifelse1  # if the user has sufficient funds, they can double
-                    li $v0, 4
-    		    la $a0, HSDP  # hit, stand, double, split
-    		    syscall
-    		j function_HSDP
-                double_ifelse1:  # if the user does not have sufficient funds, they cant double or split
-    		    li $v0, 4
-    		    la $a0, HS
-    		    syscall
-    		j function_HS
-            pair_ifelse:  # if the user does not have a pair, they cant split
-                blt $t5, $t3, double_ifelse2  # if the user has sufficient funds, they can double
-                    li $v0, 4
-    		    la $a0, HSD  # hit, stand, double
-    		    syscall
-    		j function_HSD
-                double_ifelse2:  # if the user does not have sufficient funds, they cant double
-    		    li $v0, 4
-    		    la $a0, HS
-    		    syscall
-    		j function_HS
+            blt $t7, $t5, double_ifelse  # if the user has sufficient funds, they can double
+                bne $t1, $t3, pair_ifelse  # if they also have a pair, they can split
+                    j function_HSDP  # they have funds to double, and they have a pair
+                pair_ifelse:
+                    j function_HSD  # they have funds to double and no pair
+                double_ifelse:
+                    j function_HS  # no funds to double / split
     
             function_HSDP:
+                li $v0, 4
+                la $a0, HSDP
+                syscall
                 li $v0, 12
                 syscall  # read char, store ascii value in $v0
         
@@ -425,10 +317,12 @@ main:
                 li $v0, 4
                 la $a0, FaultyAction  # faulty action printed after fall through (none of the correct keys used)
                 syscall
-                la $a0, HSDP
-                syscall
                 j function_HSDP  # try again
+                
             function_HSD:
+                li $v0, 4
+                la $a0, HSD
+                syscall
                 li $v0, 12
                 syscall  # read char, store ascii value in $v0
         
@@ -442,10 +336,12 @@ main:
                 li $v0, 4
                 la $a0, FaultyAction  # faulty action printed after fall through (none of the correct keys used)
                 syscall
-                la $a0, HSD
-                syscall
                 j function_HSD  # try again
+                
             function_HS:
+                li $v0, 4
+                la $a0, HS
+                syscall
                 li $v0, 12
                 syscall  # read char, store ascii value in $v0
     
@@ -457,15 +353,13 @@ main:
                 li $v0, 4
                 la $a0, FaultyAction  # faulty action printed after fall through (none of the correct keys used)
                 syscall
-                la $a0, HS
-                syscall
                 j function_HS  # try again
 ##############################################################################################################################################################################
     
 ## Protocol Block
 ##############################################################################################################################################################################
     hit_protocol:
-        li $s3, 0  # i = 0; will be incremented on successive hits to move the card placement
+        li $s2, 0  # i = 0; will be incremented on successive hits to move the card placement
         
         li $s1, 127
         li $s0, 144  # ^ we dont include the first hit coords in the loop
@@ -485,25 +379,23 @@ main:
             lw $t4, 0($s4)  # ace count in $t4
             bgt $t5, $t0, hit_ace_check  # check for low ace if we have more than 21
             
+        hit_or_stand_next_card:
             li $v0, 4
-            la $a0, HS  # under 21, prompt the user to hit or stand
+            la $a0, HS
             syscall
-            hit_or_stand_next_card:
-                li $v0, 12
-                syscall  # read char, store ascii value in $v0
+            li $v0, 12
+            syscall  # read char, store ascii value in $v0
     
-                li $t0, 'h'
-        	beq $t0, $v0, hit_or_stand_protocol
-        	li $t0, 's'
-        	beq $t0, $v0, stand_protocol
+            li $t0, 'h'
+            beq $t0, $v0, hit_or_stand_protocol
+            li $t0, 's'
+            beq $t0, $v0, dealer_protocol
+            
+            li $v0, 4
+            la $a0, FaultyAction
+            syscall
                 
-                li $v0, 4
-                la $a0, FaultyAction
-                syscall
-                la $a0, HS
-                syscall
-                
-                j hit_or_stand_next_card  # faulty action, loop back
+            j hit_or_stand_next_card  # faulty action, loop back
             
         hit_ace_check:
             beq $t4, $zero, loser  # user busts
@@ -515,69 +407,70 @@ main:
                 
         hit_or_stand_protocol:  # used to shift subsequent cards on the gui
             li $t0, 0
-            bne $t0, $s3, second_hit
+            bne $t0, $s2, second_hit
                 li $s1, 319
                 li $s0, 144
-                addi $s3, $s3, 1
+                addi $s2, $s2, 1
                 j hit_loop  # we loop back after the hit, and on the next loop we will be one hit further down
             second_hit:
             addi $t0, $t0, 1
-            bne $t0, $s3, third_hit
+            bne $t0, $s2, third_hit
                 li $s1, 71
                 li $s0, 144
-                addi $s3, $s3, 1
+                addi $s2, $s2, 1
                 j hit_loop
             third_hit:
             addi $t0, $t0, 1
-            bne $t0, $s3, fourth_hit
+            bne $t0, $s2, fourth_hit
                 li $s1, 375
                 li $s0, 144
-                addi $s3, $s3, 1
+                addi $s2, $s2, 1
                 j hit_loop
             fourth_hit:
             addi $t0, $t0, 1
-            bne $t0, $s3, fifth_hit
+            bne $t0, $s2, fifth_hit
                 li $s1, 15
                 li $s0, 144
-                addi $s3, $s3, 1
+                addi $s2, $s2, 1
                 j hit_loop
             fifth_hit:
             addi $t0, $t0, 1
-            bne $t0, $s3, sixth_hit
+            bne $t0, $s2, sixth_hit
                 li $s1, 431
                 li $s0, 144
-                addi $s3, $s3, 1
+                addi $s2, $s2, 1
                 j hit_loop
             sixth_hit:
             addi $t0, $t0, 1
-            bne $t0, $s3, seventh_hit
+            bne $t0, $s2, seventh_hit
                 li $s1, 183
                 li $s0, 114  # move up 30 on the y axis, as we are now stacking cards
-                addi $s3, $s3, 1
+                addi $s2, $s2, 1
                 j hit_loop
             seventh_hit:
             addi $t0, $t0, 1
-            bne $t0, $s3, eight_hit
+            bne $t0, $s2, eight_hit
                 li $s1, 263
                 li $s0, 114
-                addi $s3, $s3, 1
+                addi $s2, $s2, 1
                 j hit_loop
             eight_hit:
             addi $t0, $t0, 1
-            bne $t0, $s3, ninth_hit
+            bne $t0, $s2, ninth_hit
                 li $s1, 127
                 li $s0, 114
-                addi $s3, $s3, 1
+                addi $s2, $s2, 1
                 j hit_loop
             ninth_hit:
             addi $t0, $t0, 1
-            bne $t0, $s3, tenth_hit
+            bne $t0, $s2, tenth_hit
                 li $s1, 319
                 li $s0, 114
-                addi $s3, $s3, 1
+                addi $s2, $s2, 1
                 j hit_loop
             tenth_hit:  # mathematically can have no more than eleven cards (draw two, hit nine plus an extra for safety)
             
+    # onlt used on initial stands to filter for low aces
     stand_protocol:
         li $t0, 21
         la $s5, UserBustAddr1
@@ -597,7 +490,7 @@ main:
             j stand_ace_check
             
     double_protocol:
-        la $t0, Wager
+        la $t0, Wager1
         lw $t1, 0($t0)
         mul $t1, $t1, 2
         sw $t1, 0($t0)  # double the wager amount
@@ -630,13 +523,13 @@ main:
             
     split_protocol:
         j Done
-        # draw the blue line, cut the bust value in half and put it in 1 and 2, play left hand, play right hand, dealer plays
+        # draw the blue line, cut the bust value in half and put it in 1 and 2, play left hand, play right hand, dealer plays. flash colors on each half of the screen.
         
     dealer_protocol:
         li $t8, 1000000
-        dealer_delay0:  # give pause between each card
+        dealer_delay1:  # give pause between each card
             addi $t8, $t8, -1
-            bne $zero, $t8, dealer_delay0
+            bne $zero, $t8, dealer_delay1
     
         la $s5, DealerBustAddr
         la $s4, DealerAceCountAddr
@@ -648,94 +541,94 @@ main:
         
         jal draw_card
         # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
-        lw $t4, 0($s4)  # ace count in $t4, addr in $s4
-        
-        li $t8, 1000000
-        dealer_delay1:  # give pause between each card
-            addi $t8, $t8, -1
-            bne $zero, $t8, dealer_delay1
         
         li $t0, 17
         lw $t5, 0($s5)  # bust count in $t5, addr in $s5
+        lw $t4, 0($s4)  # ace count in $t4, addr in $s4
         blt $t5, $t0, dealer_decision1  # if the dealer has less than 17, skip the check to draw another card
             jal dealer_decision_check  # if an ace can be removed, we will return here to draw another card
         dealer_decision1:
-        
-        li $s1, 124  # card 3
-        li $s0, 22 
-        la $t6, DealerOffset
-        lw $t7, 0($t6)
-        add $s1, $s1, $t7  # add the deck over flow (default 0)
-        
-        jal draw_card
-        # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
-        lw $t4, 0($s4)  # ace count, not addr
         
         li $t8, 1000000
         dealer_delay2:  # give pause between each card
             addi $t8, $t8, -1
             bne $zero, $t8, dealer_delay2
         
-        li $t0, 17
-        lw $t5, 0($s5)
-        blt $t5, $t0, dealer_decision2  # if the dealer has less than 17, skip the check to draw another card
-            jal dealer_decision_check  # if an ace can be removed, we will return here to draw another card (jal and $ra)
-        dealer_decision2:
-        
-        li $s1, 322  # card 4
-        li $s0, 22
         la $t6, DealerOffset
         lw $t7, 0($t6)
+        li $s1, 124  # card 3
+        li $s0, 22 
         add $s1, $s1, $t7  # add the deck over flow (default 0)
         
         jal draw_card
         # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
-        lw $t4, 0($s4)  # ace count, not addr
+        
+        li $t0, 17
+        lw $t5, 0($s5)
+        lw $t4, 0($s4)  # ace count in $t4, addr in $s4
+        blt $t5, $t0, dealer_decision2  # if the dealer has less than 17, skip the check to draw another card
+            jal dealer_decision_check  # if an ace can be removed, we will return here to draw another card (jal and $ra)
+        dealer_decision2:
         
         li $t8, 1000000
         dealer_delay3:  # give pause between each card
             addi $t8, $t8, -1
             bne $zero, $t8, dealer_delay3
         
+        la $t6, DealerOffset
+        lw $t7, 0($t6)
+        li $s1, 322  # card 4
+        li $s0, 22
+        add $s1, $s1, $t7  # add the deck over flow (default 0)
+        
+        jal draw_card
+        # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
+        
         li $t0, 17
         lw $t5, 0($s5)
+        lw $t4, 0($s4)  # ace count in $t4, addr in $s4
         blt $t5, $t0, dealer_decision3  # if the dealer has less than 17, skip the check to draw another card
             jal dealer_decision_check  # if an ace can be removed, we will return here to draw another card
         dealer_decision3:
         
-        li $s1, 58  # card 5
-        li $s0, 22
+        li $t8, 1000000
+        dealer_delay4:  # give pause between each card
+            addi $t8, $t8, -1
+            bne $zero, $t8, dealer_delay4
+        
         la $t6, DealerOffset
         lw $t7, 0($t6)
+        li $s1, 58  # card 5
+        li $s0, 22
         add $s1, $s1, $t7  # add the deck over flow (default 0)
         
         jal draw_card
         # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
-        lw $t4, 0($s4)  # ace count, not addr
         
         li $t0, 17
         lw $t5, 0($s5)
+        lw $t4, 0($s4)  # ace count in $t4, addr in $s4
         blt $t5, $t0, dealer_decision4  # if the dealer has less than 17, skip the check to draw another card
             jal dealer_decision_check  # if an ace can be removed, we will return here to draw another card
         dealer_decision4:
-        
-        li $s1, 388  # card 6
-        li $s0, 22
-        la $t6, DealerOffset
-        lw $t7, 0($t6)
-        add $s1, $s1, $t7  # add the deck over flow (default 0)
-        
-        jal draw_card
-        # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
-        lw $t4, 0($s4)  # ace count, not addr
         
         li $t8, 1000000
         dealer_delay5:  # give pause between each card
             addi $t8, $t8, -1
             bne $zero, $t8, dealer_delay5
         
+        la $t6, DealerOffset
+        lw $t7, 0($t6)
+        li $s1, 388  # card 6
+        li $s0, 22
+        add $s1, $s1, $t7  # add the deck over flow (default 0)
+        
+        jal draw_card
+        # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
+        
         li $t0, 17
         lw $t5, 0($s5)
+        lw $t4, 0($s4)  # ace count in $t4, addr in $s4
         blt $t5, $t0, dealer_decision5  # if the dealer has less than 17, skip the check to draw another card
             jal dealer_decision_check  # if an ace can be removed, we will return here to draw another card
         dealer_decision5:
@@ -769,7 +662,7 @@ main:
 ## Result Block
 ##############################################################################################################################################################################
     winner:
-        la $t0, Wager
+        la $t0, Wager1
         lw $t1, 0($t0)
         la $t2, Bank
         lw $t3, 0($t2)
@@ -779,119 +672,64 @@ main:
         li $v0, 4
         la $a0, WinMessage
         syscall
-        li $v0, 1
-        move $a0, $t3  # print the bank amount
-        syscall
-
-	li $t8, 1500000
-        win_delay1:  # wait before the lime comes up; lets the user see final cards
-            addi $t8, $t8, -1
-            bne $zero, $t8, win_delay1
-        
-        li $t0, 512  # screen width
-        li $t1, 256  # screen height
-        mul $t2, $t0, $t1  # total pixels = width * height
-        mul $t2, $t2, 4  # bytes to words
 
         la $t0, LIME
-        lw $t0, 0($t0)  # $t0 = lime; win screen
-
-        li $t3, 0  # i = 0; i will iterate across every pixel on the map
-        fill_lime:
-            add $t4, $s7, $t3  # addr = frameBuffer + pixel offset
-            sw  $t0, 0($t4)  # store lime in the addr of our current pixel
-            addi $t3, $t3, 4  # i += 4 (bytes to words)
-            blt  $t3, $t2, fill_lime
-            
-            li $t8, 100000
-            win_delay2:  # wait until the lime is on screen for some time
-                addi $t8, $t8, -1
-                bne $zero, $t8, win_delay2
-    
-        la $t0, ReshuffleBool
-        lw $t1, 0($t0)
-        bne $t1, $zero, reshuffle_deck  # if the reshuffle is toggled, reshuffle
-        j make_background  # if not, just deal a new hand
+        lw $t9, 0($t0)  # $t9 = lime; win screen
+        j end_screen
         
     loser:
-        la $t0, Wager
+        la $t0, Wager1
         lw $t1, 0($t0)
         la $t2, Bank
         lw $t3, 0($t2)
         sub $t3, $t3, $t1
-        sw $t3, 0($t2)  # add the wager amount into Bank
+        sw $t3, 0($t2)  # subtract the wager amount from the Bank
         
         li $v0, 4
         la $a0, LossMessage
         syscall
-        li $v0, 1
-        move $a0, $t3  # print the bank amount
-        syscall
-        
-        li $t8, 1500000
-        loss_delay1:  # wait until the red comes on screen; lets user see the final cards
-            addi $t8, $t8, -1
-            bne $zero, $t8, loss_delay1
-        
-        li $t0, 512  # screen width
-        li $t1, 256  # screen height
-        mul $t2, $t0, $t1  # total pixels = width * height
-        mul $t2, $t2, 4  # bytes to words
-
+ 
         la $t0, RED
-        lw $t0, 0($t0)  # $t0 = RED; loss screen
-
-        li $t3, 0  # i = 0; i will iterate across every pixel on the map
-        fill_red:
-            add $t4, $s7, $t3  # addr = frameBuffer + pixel offset
-            sw  $t0, 0($t4)  # store brown in the addr of our current pixel
-            addi $t3, $t3, 4  # i += 4 (bytes to words)
-            blt  $t3, $t2, fill_red
-            
-            li $t8, 200000
-            loss_delay2:  # make sure the red is on screen for some time
-                addi $t8, $t8, -1
-                bne $zero, $t8, loss_delay2
-                
-        la $t0, ReshuffleBool
-        lw $t1, 0($t0)
-        bne $t1, $zero, reshuffle_deck  # if the reshuffle is toggled, reshuffle
-        j make_background  # if not, just deal a new hand
+        lw $t9, 0($t0)  # $t9 = RED; loss screen
+        addi $t8, $zero, 1500000
+        j end_screen
         
     tie:
-        la $t0, Bank
-        lw $t1, 0($t0)
-    
         li $v0, 4
         la $a0, TieMessage
         syscall
+        
+        la $t0, GRAY
+        lw $t9, 0($t0)  # $t9 = GRAY; tie screen
+        j end_screen
+       
+    end_screen: 
+        la $t0, Bank
+        lw $t1, 0($t0)
         li $v0, 1
         move $a0, $t1  # print the bank amount
         syscall
         
-        li $t8, 1500000
-        tie_delay1:  # wait until the gray is on screen for some time; allows user to see final cards
+        addi $t8, $zero, 1500000
+        end_delay1:  # wait until the color is on screen for some time; allows user to see final cards
             addi $t8, $t8, -1
-            bne $zero, $t8, tie_delay1
+            bne $zero, $t8, end_delay1
         
         li $t0, 512  # screen width
         li $t1, 256  # screen height
         mul $t2, $t0, $t1  # total pixels = width * height
         mul $t2, $t2, 4  # bytes to words
 
-        la $t0, GRAY
-        lw $t0, 0($t0)  # $t0 = RED
-
         li $t3, 0  # i = 0; i will iterate across every pixel on the map
-        fill_gray:
+        end_fill:
             add $t4, $s7, $t3  # addr = frameBuffer + pixel offset
-            sw  $t0, 0($t4)  # store brown in the addr of our current pixel
+            sw  $t9, 0($t4)  # store brown in the addr of our current pixel
             addi $t3, $t3, 4  # i += 4 (bytes to words)
-            blt  $t3, $t2, fill_gray
+            blt  $t3, $t2, end_fill
             li $t5, 100000
-            tie_delay2:  # wait until the gray is on screen for some time
+            end_delay2:  # wait until the gray is on screen for some time
                 addi $t5, $t5, -1
-                bne $zero, $t5, tie_delay2
+                bne $zero, $t5, end_delay2
                 
         la $t0, ReshuffleBool
         lw $t1, 0($t0)
@@ -914,12 +752,12 @@ main:
             sw $t1, 0($t0)
         reshuffle_bool:  # reshuffle will take affect after the hand is over
         
-        ## Crucial values
-        addi $t3, $s1, 66  # right edge of the card (66 wide)
+        ## CRUCUAL VALUES - $t3 & $t4
+        addi $t3, $s1, 66  # right edge of the card (66 wide); USED AS A RIGHT BOUND
         addi $t4, $s0, 90  # bottom edge of the card (90 tall)
     
-        la $t9, BLACK
-        lw $t9, 0($t9)  # $t9 = black
+        la $t8, BLACK
+        lw $t9, 0($t8)  # $t9 = black
     
         move $t0, $s0  # preserve original y value in $s0
         increment_black_row:
@@ -941,8 +779,8 @@ main:
         addi $s0, $s0, 4
         addi $s1, $s1, 4
     
-        la $t9, WHITE
-        lw $t9, 0($t9)  # $t9 = white
+        la $t8, WHITE
+        lw $t9, 0($t8)  # $t9 = white
     
         move $t0, $s0  # preserve original y value in $s0
         increment_white_row:
@@ -1012,100 +850,25 @@ main:
         
                 move $t7, $s0
                 move $t8, $s1
-                li $t5, 0  # i = 1
-                li $t6, 14  # set the height of the rectangle
-    	        two_rows_1thru14:
-    	            mul $t0, $t7, 512  # value of the first pixel on the row
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4  # bytes to words
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1  # x += 1
-    	            blt $t8, $t3, two_rows_1thru14
-    	        
-    	            addi $t5, $t5, 1  # i += 1
-    	            addi $t7, $t7, 1  # y += 1
-    	            move $t8, $s1  # reset x for the next row
-    	            blt $t5, $t6, two_rows_1thru14
+                li $s3, 14  # set the height of the rectangle
+    	        jal rows_14tall
     	        
     	        addi $s0, $s0, 26  # moving starting y position down 26
-    	        move $t7, $s0
-                move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set the height of the rectangle
-    	        two_rows_27thru40:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1 
-    	            blt $t8, $t3, two_rows_27thru40
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1 
-    	            move $t8, $s1
-    	            blt $t5, $t6, two_rows_27thru40
+    	        jal rows_14tall
     	        
     	        addi $s0, $s0, 26  # moving starting y position down 26
-    	        move $t7, $s0
-                move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set the height of the rectangle
-    	        two_rows_53thru66:
-    	            mul $t0, $t7, 512  # value of the first pixel on the row
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1 
-    	            blt $t8, $t3, two_rows_53thru66
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1 
-    	            blt $t5, $t6, two_rows_53thru66
+    	        jal rows_14tall
     	        
     	        addi $s0, $s0, -26  # moving starting y position up 26
-    	        move $t7, $s0
-    	        move $t8, $s1
-    	        addi $t3, $t3, -28  # shortening length from 42 to 14 (moving right bound)
-                li $t5, 0
-                li $t6, 40  # height of 40
-    	        two_cols_1thru14:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, two_cols_1thru14
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, two_cols_1thru14
+    	        li $s3, 40  # height of 40
+    	        addi $t3, $t3, -28  # move right bound to the left by 28
+    	        jal cols_14thick
     	        
     	        addi $s0, $s0, -26  # moving starting y position up 26
-    	        move $t7, $s0
-    	        move $t8, $s1
+    	        li $s3, 40  # height of 40
     	        addi $t3, $t3, 28  # move right bound to the right by 28
     	        addi $s1, $s1, 28  # move starting x position to the right by 28
-                li $t5, 0
-                li $t6, 40  # setting height at 40
-    	        two_cols_29thru52:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, two_cols_29thru52
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, two_cols_29thru52
+    	        jal cols_14thick
     	        
     	        j After    
     	    
@@ -1118,82 +881,18 @@ main:
                 la $t2, CardType
                 sw $t0, 0($t2)  # store the cards type to check for pairs
         
-                move $t7, $s0
-                move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height at 14
-    	        three_rows_1thru14:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, three_rows_1thru14
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, three_rows_1thru14
+                jal rows_14tall
     	        
     	        addi $s0, $s0, 26  # move initial y position down 26
-    	        move $t7, $s0
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height at 14
-    	        three_rows_27thru40:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, three_rows_27thru40
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, three_rows_27thru40
+    	        jal rows_14tall
     	        
     	        addi $s0, $s0, 26  # move initial y position down 26
-    	        move $t7, $s0
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height at 14
-    	        three_rows_52thru66:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, three_rows_52thru66
-    	            
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, three_rows_52thru66
-    	    
+    	        jal rows_14tall
     	        
     	        addi $s0, $s0, -52  # move initial y position up 52
-    	        move $t7, $s0
     	        addi $s1, $s1, 28  # move initial x position right by 28
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 66  # set height as 66
-    	        three_cols_29thru52:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, three_cols_29thru52
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, three_cols_29thru52
+                li $s3, 66  # set height as 66
+    	        jal cols_14thick
     	        
     	        j After
     	    
@@ -1207,63 +906,17 @@ main:
                 sw $t0, 0($t2)  # store the card type to check for pairs
         
                 addi $s0, $s0, 26  # move initial y position down 26
-    	        move $t7, $s0
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height as 14
-    	        four_rows_27thru40:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, four_rows_27thru40
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, four_rows_27thru40
+    	        jal rows_14tall
     	        
     	        addi $s0, $s0, -26  # movie initial y position up 26
-    	        move $t7, $s0
     	        addi $s1, $s1, 28  # move initial x position right 28
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 66  # set height as 66
-    	        four_cols_29thru52:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, four_cols_29thru52
+                li $s3, 66  # set height as 66
+    	        jal cols_14thick
     	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, four_cols_29thru52
-    	        
-    	        move $t7, $s0
     	        addi $s1, $s1, -28  # move initial x position left 28
-    	        move $t8, $s1
     	        addi $t3, $t3, -28  # move right bound left 28
-                li $t5, 0
-                li $t6, 40  # set height as 40
-    	        four_cols_1thru14:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, four_cols_1thru14
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, four_cols_1thru14
+                li $s3, 40  # set height as 40
+    	        jal cols_14thick
     	        
     	        j After
     	
@@ -1276,102 +929,24 @@ main:
                 la $t2, CardType
                 sw $t0, 0($t2)  # save card type to check for pairs
         
-                move $t7, $s0
-                move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height to 14
-    	        five_rows_1thru14:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, five_rows_1thru14
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, five_rows_1thru14
+                jal rows_14tall
     	        
     	        addi $s0, $s0, 26  # move initial y position down 26
-       	        move $t7, $s0
-       	        move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height as 14
-    	        five_rows_27thru40:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, five_rows_27thru40
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, five_rows_27thru40
+       	        jal rows_14tall
     	        
     	        addi $s0, $s0, 26  # move initial y position down 26
-    	        move $t7, $s0
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height as 14
-    	        five_rows_52thru66:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, five_rows_52thru66
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, five_rows_52thru66
+    	        jal rows_14tall
     	    
     	        addi $s0, $s0, -52  # movie initial y position up 52
-    	        move $t7, $s0
-    	        move $t8, $s1
     	        addi $t3, $t3, -28  # mvove the right bound left by 28
-                li $t5, 0
-                li $t6, 40  # set height as 40
-    	        five_cols_1thru14:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, five_cols_1thru14
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, five_cols_1thru14
+                li $s3, 40  # set height as 40
+    	        jal cols_14thick
     	        
     	        addi $s0, $s0, 26  # move initial y position down 26
-    	        move $t7, $s0
     	        addi $t3, $t3, 28  # move right bound to the right by 28
     	        addi $s1, $s1, 28  # move initial x position right 28
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 40  # set height as 40
-    	        five_cols_29thru52:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, five_cols_29thru52
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, five_cols_29thru52
+                li $s3, 40  # set height as 40
+    	        jal cols_14thick
     	    
     	        j After
     	    
@@ -1385,83 +960,21 @@ main:
                 sw $t0, 0($t2)  # store the card type to check for pairs
         
                 addi $s0, $s0, 26  # move initial y position down 26
-    	        move $t7, $s0
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height as 14
-    	        six_rows_27thru40:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, six_rows_27thru40
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, six_rows_27thru40
+    	        jal rows_14tall
     	        
     	        addi $s0, $s0, 26  # move initial y position down 26
-    	        move $t7, $s0
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height as 14
-    	        six_rows_52thru66:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, six_rows_52thru66
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, six_rows_52thru66
+    	        jal rows_14tall
     	    
     	        addi $s0, $s0, -52  # move initial y position up 52
-    	        move $t7, $s0
-    	        move $t8, $s1
     	        addi $t3, $t3, -28  # move right bound to the left by 28
-                li $t5, 0
-                li $t6, 66  # set height as 66
-    	        six_cols_1thru14:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, six_cols_1thru14
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, six_cols_1thru14
+                li $s3, 66  # set height as 66
+    	        jal cols_14thick
     	        
     	        addi $s0, $s0, 26  # move initial y position down 26
-    	        move $t7, $s0
     	        addi $t3, $t3, 28  # move right bound to the right by 28
     	        addi $s1, $s1, 28  # move the initial x position right 28
-    	         move $t8, $s1
-                li $t5, 0
-                li $t6, 40  # set height as 40
-    	        six_cols_29thru52:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, six_cols_29thru52
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, six_cols_29thru52
+                li $s3, 40  # set height as 40
+    	        jal cols_14thick
     	     
     	        j After
     	
@@ -1474,42 +987,11 @@ main:
                 la $t2, CardType
                 sw $t0, 0($t2)  # store the card type to check for pairs
           
-                move $t7, $s0
-                move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height as 14
-    	        seven_rows_1thru14:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, seven_rows_1thru14
+                jal rows_14tall
     	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, seven_rows_1thru14
-    	        
-    	        move $t7, $s0
     	        addi $s1, $s1, 28  # move initial x position right by 28
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 66  # set height as 66
-    	        seven_cols_29thru52:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, seven_cols_29thru52
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, seven_cols_29thru52
+                li $s3, 66  # set height as 66
+    	        jal cols_14thick
     	        
     	        j After
     	    
@@ -1522,101 +1004,23 @@ main:
                 la $t2, CardType
                 sw $t0, 0($t2)  # store the card type to check for pairs
         
-                move $t7, $s0
-                move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height to 14
-    	        eight_rows_1thru14:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, eight_rows_1thru14
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, eight_rows_1thru14
+                jal rows_14tall
     	        
     	        addi $s0, $s0, 26  # move initial y position down 26
-    	        move $t7, $s0
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height to 14
-    	        eight_rows_27thru40:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, eight_rows_27thru40
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, eight_rows_27thru40
+    	        jal rows_14tall
     	        
     	        addi $s0, $s0, 26  # move initial y position down 26
-    	        move $t7, $s0
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height as 14
-    	        eight_rows_52thru66:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, eight_rows_52thru66
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, eight_rows_52thru66
+    	        jal rows_14tall
     	    
     	        addi $s0, $s0, -52  # move initial y position up 52
-    	        move $t7, $s0
-    	        move $t8, $s1
+    	        li $s3, 66  # set height as 66
     	        addi $t3, $t3, -28  # move right bound to the left by 28
-                li $t5, 0
-                li $t6, 66  # set height as 66
-    	        eight_cols_1thru14:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, eight_cols_1thru14
+    	        jal cols_14thick
     	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, eight_cols_1thru14
-    	        
-    	        move $t7, $s0
     	        addi $t3, $t3, 28  # move right bound right by 28
     	        addi $s1, $s1, 28  # move initial x position right by 28
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 66  # set height as 66
-    	        eight_cols_29thru52:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, eight_cols_29thru52
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, eight_cols_29thru52
+                li $s3, 66  # set height as 66
+    	        jal cols_14thick
     	    
     	        j After
     	    
@@ -1629,101 +1033,20 @@ main:
                 la $t2, CardType
                 sw $t0, 0($t2)  # store card type to check for pairs
         
-                move $t7, $s0
-                move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height as 14
-    	        nine_rows_1thru14:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, nine_rows_1thru14
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, nine_rows_1thru14
+                jal rows_14tall
     	        
     	        addi $s0, $s0, 26  # move initial y position down by 26
-    	        move $t7, $s0
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height as 14
-    	        nine_rows_27thru40:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, nine_rows_27thru40
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, nine_rows_27thru40
-    	        
-    	        addi $s0, $s0, 26  # move initial y position down by 26
-    	        move $t7, $s0
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height as 14
-    	        nine_rows_52thru66:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, nine_rows_52thru66
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, nine_rows_52thru66
+    	        jal rows_14tall
     	    
-    	        addi $s0, $s0, -52  # move initial y position up 52
-    	        move $t7, $s0
-    	        move $t8, $s1
+    	        addi $s0, $s0, -26  # move initial y position up 52
+    	        li $s3, 40  # set height as 40
     	        addi $t3, $t3, -28  # move right bound to the left by 28
-                li $t5, 0
-                li $t6, 40  # set height as 40
-    	        nine_cols_1thru14:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, nine_cols_1thru14
+                jal cols_14thick
     	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, nine_cols_1thru14
-    	        
-    	        move $t7, $s0
     	        addi $t3, $t3, 28  # move right bound to the right by 28
     	        addi $s1, $s1, 28  # move initial x position to the right by 28
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 66  # set height as 66
-    	        nine_cols_29thru52:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, nine_cols_29thru52
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, nine_cols_29thru52
+                li $s3, 66  # set height as 66
+    	        jal cols_14thick
     	    
     	        j After
     	    
@@ -1736,102 +1059,25 @@ main:
                 la $t2, CardType
                 sw $t0, 0($t2)  # store the card type to check for pairs
         
-                move $t7, $s0
-                move $t8, $s1
     	        addi $t3, $t3, -32  # move the right bound to the left by 32
-                li $t5, 0
-                li $t6, 66  # set height as 66
-    	        ten_cols_1thru10:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, ten_cols_1thru10
-    	         
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, ten_cols_1thru10
+                li $s3, 66  # set height as 66
+    	        jal cols_14thick
     	        
-    	        move $t7, $s0
     	        addi $t3, $t3, 16  # move the right bound to the right by 16
     	        addi $s1, $s1, 16  # move initial x position to the right by 16
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 66  # set height as 66
-    	        ten_cols_17thru26:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, ten_cols_17thru26
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, ten_cols_17thru26
+                li $s3, 66  # set height as 66
+    	        jal cols_14thick
     	    
-    	        move $t7, $s0
     	        addi $t3, $t3, 16  # move the right bound to the right by 16
     	        addi $s1, $s1, 16  # move the initial x position right by 16
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 66  # set height as 66
-    	        ten_cols_33thru42:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, ten_cols_33thru42
+                li $s3, 66  # set height as 66
+    	        jal cols_14thick
     	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, ten_cols_33thru42
-    	        
-    	        move $t7, $s0
     	        addi $s1, $s1, -6  # move the initial x position to the left by 6
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set the height as 14
-    	        ten_rows_1thru14:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, ten_rows_1thru14
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, ten_rows_1thru14
+    	        jal rows_14tall
     	        
     	        addi $s0, $s0, 52  # move initial y position down by 52
-    	        move $t7, $s0
-    	        move $t8, $s1
-                li $t5, 0 
-                li $t6, 14  # set height as 14
-    	        ten_rows_52thru66:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, ten_rows_52thru66
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, ten_rows_52thru66
+    	        jal rows_14tall
     	        
     	        j After
     	    
@@ -1847,43 +1093,12 @@ main:
                 addi $t0, $t0, -1  # restore card value
         
                 addi $s0, $s0, 52  # move initial y position down 52
-    	        move $t7, $s0
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height as 14
-    	        eleven_rows_52thru66:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, eleven_rows_52thru66
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, eleven_rows_52thru66
+    	        jal rows_14tall
     	        
     	        addi $s0, $s0, -52  # move initial y position up 52
-    	        move $t7, $s0
     	        addi $s1, $s1, 28  # move initial x position right by 28
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 66  # set height as 66
-    	        eleven_cols_29thru52:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, eleven_cols_29thru52
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, eleven_cols_29thru52
+                li $s3, 66  # set height as 66
+    	        jal cols_14thick
     	    
     	        j After
     	    
@@ -1898,103 +1113,26 @@ main:
                 sw $t0, 0($t2)
                 addi $t0, $t0, -2  # store card type to search for pairs, then restore value
         
-                move $t7, $s0
-                move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height as 14
-    	        twelve_rows_1thru14:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, twelve_rows_1thru14
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, twelve_rows_1thru14
+                jal rows_14tall
     	        
     	        addi $s0, $s0, 52  # move initial y position down by 52
-    	        move $t7, $s0
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height as 14
-    	        twelve_rows_52thru66:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, twelve_rows_52thru66
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, twelve_rows_52thru66
+    	        jal rows_14tall
     	    
     	        addi $s0, $s0, -52  # move initial y value up 52
-    	        move $t7, $s0
-    	        move $t8, $s1
     	        addi $t3, $t3, -28  # move right bound to the left by 28
-                li $t5, 0
-                li $t6, 66  # set height as 66
-    	        twelve_cols_1thru14:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, twelve_cols_1thru14
+                li $s3, 66  # set height as 66
+    	        jal cols_14thick
     	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, twelve_cols_1thru14
-    	        
-    	        move $t7, $s0
     	        addi $t3, $t3, 28  # move the right bound to the right by 28
     	        addi $s1, $s1, 28  # move the initial x position right by 28
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 66  # set height as 66
-    	        twelve_cols_29thru52:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, twelve_cols_29thru52
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, twelve_cols_29thru52
+                li $s3, 66  # set height as 66
+    	        jal cols_14thick
     	        
     	        addi $s0, $s0, 42  # move initial y position down by 42
-    	        move $t7, $s0
     	        addi $t3, $t3, -17  # move right bound to the left by 17
     	        addi $s1, $s1, -11  # move initial x position to the left by 11
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 30  # set height as 30
-    	        twelve_cols_17thru25:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, twelve_cols_17thru25
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, twelve_cols_17thru25
+                li $s3, 30  # set height as 30
+    	        jal cols_14thick
     	     
     	        j After
     	
@@ -2009,86 +1147,25 @@ main:
                 sw $t0, 0($t2)
                 addi $t0, $t0, -3  # restore value
         
-                move $t7, $s0
-                move $t8, $s1
     	        addi $t3, $t3, -30  # move the right bound to the left by 30
-                li $t5, 0
-                li $t6, 66  # set height as 66
-    	        thirteen_cols_1thru12:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, thirteen_cols_1thru12
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, thirteen_cols_1thru12
+                li $s3, 66  # set height as 66
+    	        jal cols_14thick
     	        
     	        addi $s0, $s0, 40  # move initial y position down by 40
-    	        move $t7, $s0
     	        addi $t3, $t3, 20  # move the right bound to the right by 20
     	        addi $s1, $s1, 22  # move the initial x position to the right by 22
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 26  # set height to 26
-    	        thirteen_cols_23thru32:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, thirteen_cols_23thru32
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, thirteen_cols_23thru32
+                li $s3, 26  # set height to 26
+    	        jal cols_14thick
     	        
     	        addi $s0, $s0, -40  # move initial y position up by 40
-    	        move $t7, $s0
     	        addi $t3, $t3, 10  # move the right bound to the right by 10
     	        addi $s1, $s1, 10  # move initial x position to the right by 10
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 26  # set height as 26
-    	        thirteen_cols_33thru42:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, thirteen_cols_33thru42
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, thirteen_cols_33thru42
+                li $s3, 26  # set height as 26
+    	        jal cols_14thick
     	        
     	        addi $s0, $s0, 26  # move initial y position down by 26
-    	        move $t7, $s0
     	        addi $s1, $s1, -32  # move initial x position left be 32
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height as 14
-    	        thirteen_rows_27thru40:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, thirteen_rows_27thru40
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, thirteen_rows_27thru40
+    	        jal rows_14tall
     	       
     	        j After
     	    
@@ -2106,87 +1183,65 @@ main:
     	        lw $t1, 0($s4)
     	        addi $t1, $t1, 1
     	        sw $t1, 0($s4)  # increment our ace count; used to decide if aces are high / low
-        
-                move $t7, $s0
-                move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height as 14
-    	        fourteen_rows_1thru14:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, fourteen_rows_1thru14
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, fourteen_rows_1thru14
+     
+                jal rows_14tall
     	        
     	        addi $s0, $s0, 26  # move initial y position down by 26
-    	        move $t7, $s0
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 14  # set height as 14
-    	        fourteen_rows_27thru40:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, fourteen_rows_27thru40
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, fourteen_rows_27thru40
-    	        
+    	        jal rows_14tall
     	    
     	        addi $s0, $s0, -26  # move initial y position up by 26
-    	        move $t7, $s0
-    	        move $t8, $s1
     	        addi $t3, $t3, -28  # move right bound to the left by 28
-                li $t5, 0
-                li $t6, 66  # set height as 66
-    	        fourteen_cols_1thru14:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, fourteen_cols_1thru14
+                li $s3, 66  # set height as 66
+    	        jal cols_14thick
     	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, fourteen_cols_1thru14
-    	        
-    	        move $t7, $s0
     	        addi $t3, $t3, 28  # move the right bound to the right by 28
     	        addi $s1, $s1, 28  # move initial x position to the right by 28
-    	        move $t8, $s1
-                li $t5, 0
-                li $t6, 66  # set height as 66
-    	        fourteen_cols_29thru52:
-    	            mul $t0, $t7, 512
-    	            add $t1, $t0, $t8  # curr pixel
-    	            mul $t1, $t1, 4
-    	            add $t2, $t1, $s7  # curr addr
-    	            sw $t9, 0($t2)  # make it red
-    	            addi $t8, $t8, 1
-    	            blt $t8, $t3, fourteen_cols_29thru52
-    	        
-    	            addi $t5, $t5, 1
-    	            addi $t7, $t7, 1
-    	            move $t8, $s1
-    	            blt $t5, $t6, fourteen_cols_29thru52
+                li $s3, 66  # set height as 66
+    	        jal cols_14thick
     	        
     	        j After
   
+            rows_14tall:
+                move $t7, $s0  # load y value into $t7
+                move $t8, $s1  # load x value into $t8
+                li $t5, 0  # i = 0
+                li $t6, 14  # set the height of the rectangle
+    	        rows_14tall_loop:
+    	            mul $t0, $t7, 512  # value of the first pixel on the row
+    	            add $t1, $t0, $t8  # curr pixel (top left)
+    	            mul $t1, $t1, 4  # bytes to words
+    	            add $t2, $t1, $s7  # curr addr
+    	            sw $t9, 0($t2)  # make it red
+    	            addi $t8, $t8, 1  # x += 1
+    	            blt $t8, $t3, rows_14tall_loop
+    	        
+    	            addi $t5, $t5, 1  # i += 1
+    	            addi $t7, $t7, 1  # y += 1
+    	            move $t8, $s1  # reset x for the next row
+    	            blt $t5, $t6, rows_14tall_loop
+                jr $ra
+                
+            # not all of the columns are actually 14 thick (but most are); thickness is set by difference between starting x coord and location of right bound ($t3)
+            cols_14thick:
+                move $t6, $s3  # move desired height into $t6
+    	        move $t7, $s0  # move y into $t7
+    	        move $t8, $s1  # move x into $t8
+                li $t5, 0  # i = 0
+    	        cols_14thick_loop:
+    	            mul $t0, $t7, 512
+    	            add $t1, $t0, $t8  # curr pixel (top left)
+    	            mul $t1, $t1, 4  # pixels to addrs
+    	            add $t2, $t1, $s7  # curr addr
+    	            sw $t9, 0($t2)  # make it red
+    	            addi $t8, $t8, 1  # x += 1
+    	            blt $t8, $t3, cols_14thick_loop
+    	        
+    	            addi $t5, $t5, 1  # i += 1
+    	            addi $t7, $t7, 1  # y += 1
+    	            move $t8, $s1  # reset x for next row
+    	            blt $t5, $t6, cols_14thick_loop
+                jr $ra
+              
     	    After:
     	        lw $ra, 0($sp)  # restore our original return address
     	        addi $sp, $sp, 4  # pop it off of the stack
