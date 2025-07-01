@@ -24,7 +24,7 @@
     WinMessage: .asciiz "\nYou Win! \n YOUR CHIP COUNT: "
     LossMessage: .asciiz "\nYou Lose! \n YOUR CHIP COUNT: "
     TieMessage: .asciiz "\nPush! \n YOUR CHIP COUNT: "
-    ReshuffleMessage1: .asciiz "Previous Deck: "
+    ReshuffleMessage1: .asciiz "\nPrevious Deck: "
     ReshuffleMessage2: .asciiz "Deck has been reshuffled\n"
     EndMessage: .asciiz "\nYOU SUCK AT GAMBLING\n"
    
@@ -55,7 +55,7 @@ main:
     	la $a0, InitialMessage1
     	syscall
 
-    j shuffle_deck
+    j shuffle_deck  # first time through, we do not want to run reshuffle
     reshuffle_deck: 
         # Print previous deck
         la $a0, ReshuffleMessage1
@@ -81,7 +81,7 @@ main:
         syscall
             
         la $t0, ReshuffleBool
-        sw $zero, 0($t0)  # reset reshufflebool
+        sw $zero, 0($t0)  # reset reshufflebool to 0
     shuffle_deck:
         li $s6, -4  # deck index stored in $s6; we iterate through this when pulling from our shuffled deck
         ## $s6 CANT BE OVERRIDDEN / OVERWRITTEN
@@ -248,7 +248,7 @@ main:
         la $t0, UserAceCount2
         sw $zero, 0($t0)
         la $t0, DealerAceCount
-        sw $zero, 0($t0)
+        sw $zero, 0($t0)  # reset all of our bust values and ace count values for the new hand
     
         la $t0, Bank
         lw $t0, 0($t0)
@@ -288,6 +288,7 @@ main:
 
             addi $s0, $s0, 1  # y += 1
             blt  $s0, $t7, increment_green_row
+            
             
         # always deal after making the new background
         initial_deal:
@@ -365,7 +366,6 @@ main:
     		    syscall
     		j function_HS
     
-    
             function_HSDP:
                 li $v0, 12
                 syscall  # read char, store ascii value in $v0
@@ -435,11 +435,26 @@ main:
                 syscall
                 j function_HS
     
-    
+## Protocol Block
+##############################################################################################################################################################################
     hit_protocol:
         j Done
     stand_protocol:
-        j Done
+        li $t0, 21
+        la $s5, UserBust1
+        la $s4, UserAceCount1
+        lw $t5, 0($s5)  # bust count
+        lw $t4, 0($s4)  # ace count
+            
+        stand_ace_check:
+            beq $zero, $t4, dealer_protocol  # no aces, check dealer
+            ble $t5, $s0, dealer_protocol  # under 21, check dealer
+            
+            addi $t4, $t4, -1
+            addi $t5, $t5, -10  # remove ten, take ace from the count
+            sw $t4, 0($s4)
+            sw $t5, 0($s5)  # save to original values
+            j stand_ace_check
     double_protocol:
         la $t0, Wager
         lw $t1, 0($t0)
@@ -464,25 +479,21 @@ main:
         nop
         double_ace_check:
             beq $zero, $t4, loser  # no aces, user busts
-            
             addi $t4, $t4, -1  # remove an ace from the count
             addi $t5, $t5, -10  # ace low
             sw $t4, 0($s4)
-            sw $t5, 0($s5)
+            sw $t5, 0($s5)  # update user bust value and ace count
             ble $t5, $t0, dealer_protocol  # under 21, check dealer
             j double_ace_check  # over 21, check for another ace
     split_protocol:
         j Done
     
-    
-    
-        
         
     dealer_protocol:
-        li $t5, 1000000
+        li $t8, 1000000
         dealer_delay0:  # give pause between each card
-            addi $t5, $t5, -1
-            bne $zero, $t5, dealer_delay0
+            addi $t8, $t8, -1
+            bne $zero, $t8, dealer_delay0
     
         la $s5, DealerBust
         la $s4, DealerAceCount
@@ -490,95 +501,117 @@ main:
         li $s0, 22
         jal draw_card
         # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
+        lw $t4, 0($s4)  # ace count, not addr
         
-        li $t5, 1000000
+        li $t8, 1000000
         dealer_delay1:  # give pause between each card
-            addi $t5, $t5, -1
-            bne $zero, $t5, dealer_delay1
+            addi $t8, $t8, -1
+            bne $zero, $t8, dealer_delay1
         
         li $t0, 17
-        lw $s5, 0($s5)
-        bge $s5, $t0, dealer_decision_check  # if dealer has 17 or more, he must stand
+        lw $t5, 0($s5)
+        blt $t5, $t0, dealer_decision1  # if the dealer has less than 17, skip the check to draw another card
+            jal dealer_decision_check  # if an ace can be removed, we will return here to draw another card
+        dealer_decision1:
         
         la $s5, DealerBust
+        la $s4, DealerAceCount
         li $s1, 124  # card 3
         li $s0, 22
         jal draw_card
         # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
+        lw $t4, 0($s4)  # ace count, not addr
         
-        li $t5, 1000000
+        li $t8, 1000000
         dealer_delay2:  # give pause between each card
-            addi $t5, $t5, -1
-            bne $zero, $t5, dealer_delay2
+            addi $t8, $t8, -1
+            bne $zero, $t8, dealer_delay2
         
         li $t0, 17
-        lw $s5, 0($s5)
-        bge $s5, $t0, dealer_decision_check
+        lw $t5, 0($s5)
+        blt $t5, $t0, dealer_decision2  # if the dealer has less than 17, skip the check to draw another card
+            jal dealer_decision_check  # if an ace can be removed, we will return here to draw another card
+        dealer_decision2:
         
         la $s5, DealerBust
         li $s1, 322  # card 4
         li $s0, 22
         jal draw_card
         # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
+        lw $t4, 0($s4)  # ace count, not addr
         
-        li $t5, 1000000
+        li $t8, 1000000
         dealer_delay3:  # give pause between each card
-            addi $t5, $t5, -1
-            bne $zero, $t5, dealer_delay3
+            addi $t8, $t8, -1
+            bne $zero, $t8, dealer_delay3
         
         li $t0, 17
-        lw $s5, 0($s5)
-        bge $s5, $t0, dealer_decision_check
+        lw $t5, 0($s5)
+        blt $t5, $t0, dealer_decision3  # if the dealer has less than 17, skip the check to draw another card
+            jal dealer_decision_check  # if an ace can be removed, we will return here to draw another card
+        dealer_decision3:
         
         la $s5, DealerBust
         li $s1, 58  # card 5
         li $s0, 22
         jal draw_card
         # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
+        lw $t4, 0($s4)  # ace count, not addr
         
-        li $t5, 1000000
+        li $t8, 1000000
         dealer_delay4:  # give pause between each card
-            addi $t5, $t5, -1
-            bne $zero, $t5, dealer_delay4
+            addi $t8, $t8, -1
+            bne $zero, $t8, dealer_delay4
         
         li $t0, 17
-        lw $s5, 0($s5)
-        bge $s5, $t0, dealer_decision_check
+        lw $t5, 0($s5)
+        blt $t5, $t0, dealer_decision4  # if the dealer has less than 17, skip the check to draw another card
+            jal dealer_decision_check  # if an ace can be removed, we will return here to draw another card
+        dealer_decision4:
+            
         
         la $s5, DealerBust
         li $s1, 388  # card 6
         li $s0, 22
         jal draw_card
         # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
+        lw $t4, 0($s4)  # ace count, not addr
         
-        li $t5, 1000000
+        li $t8, 1000000
         dealer_delay5:  # give pause between each card
-            addi $t5, $t5, -1
-            bne $zero, $t5, dealer_delay5
+            addi $t8, $t8, -1
+            bne $zero, $t8, dealer_delay5
         
         li $t0, 17
-        lw $s5, 0($s5)
-        bge $s5, $t0, dealer_decision_check
+        lw $t5, 0($s5)
+        blt $t5, $t0, dealer_decision5  # if the dealer has less than 17, skip the check to draw another card
+            jal dealer_decision_check  # if an ace can be removed, we will return here to draw another card
+        dealer_decision5:
         
         j dealer_protocol  # if we need more than 6 cards, we will just draw them on top of the first six
         
-        lw $s4, 0($s4)  # ace count, not addr
         dealer_decision_check:
             li $t0, 21
-            bgt $s5, $t0, dealer_ace_check  # if the dealer has over 21, see if he has aces
+            bgt $t5, $t0, dealer_ace_check  # if the dealer has over 21, see if he has aces
             la $t1, UserBust1
-            lw $t1, 0($t1)
-            beq $t1, $s5, tie  # if user and dealer have the same score, tie
-            blt $t1, $s5, loser  # if user has less than dealer, loss
+            lw $t2, 0($t1)
+            beq $t2, $t5, tie  # if user and dealer have the same score, tie
+            blt $t2, $t5, loser  # if user has less than dealer, loss
             j winner  # else, winner
             
             dealer_ace_check:
-                beq $zero, $s4, winner  # no aces, dealer busts
-                addi $s4, $s4, -1  # take ace from count
-                addi $s5, $s5, -10  # ace low
-                j dealer_decision_check
+                beq $zero, $t4, winner  # no aces, dealer busts
+                addi $t4, $t4, -1  # take ace from count
+                addi $t5, $t5, -10  # ace low
+                sw $t4, 0($s4)
+                sw $t5, 0($s5)  # update dealer bust value and ace count value
+                li $t0, 17
+                bge $t5, $t0, dealer_decision_check  # if dealer has more than 16, go to decision
+                jr $ra  # if dealer now has less than 17, return to draw another card
+##############################################################################################################################################################################
           
-        
+## Result Block
+##############################################################################################################################################################################
     winner:
         la $t0, Wager
         lw $t0, 0($t0)
@@ -599,7 +632,7 @@ main:
         mul $t2, $t0, $t1  # total pixels = width * height
         mul $t2, $t2, 4  # bytes to words
 
-	li $t5, 2000000
+	li $t5, 6000000
         win_delay1:  # wait before the lime comes up; lets the user see final cards
             addi $t5, $t5, -1
             bne $zero, $t5, win_delay1
@@ -613,7 +646,7 @@ main:
             sw  $t0, 0($t4)  # store brown in the addr of our current pixel
             addi $t3, $t3, 4  # i += 4 (bytes to words)
             blt  $t3, $t2, fill_lime
-            li $t5, 1000
+            li $t5, 100000
             win_delay2:  # wait until the lime is on screen for some time
                 addi $t5, $t5, -1
                 bne $zero, $t5, win_delay2
@@ -646,7 +679,7 @@ main:
         mul $t2, $t0, $t1  # total pixels = width * height
         mul $t2, $t2, 4  # bytes to words
         
-        li $t5, 2000000
+        li $t5, 6000000
         loss_delay1:  # wait until the red comes on screen; lets user see the final cards
             addi $t5, $t5, -1
             bne $zero, $t5, loss_delay1
@@ -660,7 +693,7 @@ main:
             sw  $t0, 0($t4)  # store brown in the addr of our current pixel
             addi $t3, $t3, 4  # i += 4 (bytes to words)
             blt  $t3, $t2, fill_red
-            li $t5, 5000
+            li $t5, 200000
             loss_delay2:  # make sure the red is on screen for some time
                 addi $t5, $t5, -1
                 bne $zero, $t5, loss_delay2
@@ -689,7 +722,7 @@ main:
         mul $t2, $t0, $t1  # total pixels = width * height
         mul $t2, $t2, 4  # bytes to words
 
-        li $t5, 2000000
+        li $t5, 6000000
         tie_delay1:  # wait until the gray is on screen for some time; allows user to see final cards
             addi $t5, $t5, -1
             bne $zero, $t5, tie_delay1
@@ -703,7 +736,7 @@ main:
             sw  $t0, 0($t4)  # store brown in the addr of our current pixel
             addi $t3, $t3, 4  # i += 4 (bytes to words)
             blt  $t3, $t2, fill_gray
-            li $t5, 1000
+            li $t5, 100000
             tie_delay2:  # wait until the gray is on screen for some time
                 addi $t5, $t5, -1
                 bne $zero, $t5, tie_delay2
@@ -716,11 +749,10 @@ main:
         tie_do_shuffle:
             j reshuffle_deck
             nop
+##############################################################################################################################################################################
     
-    
-    
-    
-    
+## Draw Card Block
+##############################################################################################################################################################################
     # x value stored in $s1 and y value stored in $s0 (top left corner), card index count in $s6, bust addr stored in $s5, ace count addr in $s4
     draw_card:
         addi $sp, $sp, -4
@@ -821,7 +853,7 @@ main:
             addi $t1, $zero, 13
             beq $t0, $t1, type_thirteen
             addi $t1, $zero, 14
-            beq $t0, $t1, type_fourteen  # go to the correct card type
+            beq $t0, $t1, type_fourteen
         
             type_two:
                 addi $t0, $zero, 2  # card value
@@ -2014,9 +2046,9 @@ main:
     	        lw $ra, 0($sp)
     	        addi $sp, $sp, 4
     	        jr $ra  # restore return address and jump back
-           
-        Done:
-            li $v0, 4
-            la $a0, EndMessage
-            syscall
-            
+##############################################################################################################################################################################
+
+    Done:
+        li $v0, 4
+        la $a0, EndMessage
+        syscall
