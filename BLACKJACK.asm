@@ -13,13 +13,20 @@
     GRAY: .word 0x00D3D3D3
    
     NewLine: .asciiz "\n"
-    InitialMessage1: .asciiz "YOUR STARTING CHIP COUNT: 1000 \n"
-    InitialMessage2: .asciiz "Enter your wager: "
+    InitialMessage1: .asciiz "\nYOUR STARTING CHIP COUNT: 1000"
+    InitialMessage2: .asciiz "\nEnter your wager: "
     FaultyWager: .asciiz "Insufficient funds, try again. \n"
+    FaultyAction: .asciiz "\nInvalid key. Retry. \n"
     HSDP: .asciiz "Press 'h' to hit, 's' to stand, 'p' to split, or 'd' to double: "
     HSD: .asciiz "Press 'h' to hit, 's' to stand, or 'd' to double: "
     HSP: .asciiz "Press 'h' to hit, 's' to stand, or 'p' to split:"
     HS: .asciiz "Press 'h' to hit or 's' to stand:"
+    WinMessage: .asciiz "\nYou Win! \n YOUR CHIP COUNT: "
+    LossMessage: .asciiz "\nYou Lose! \n YOUR CHIP COUNT: "
+    TieMessage: .asciiz "\nPush! \n YOUR CHIP COUNT: "
+    ReshuffleMessage1: .asciiz "Previous Deck: "
+    ReshuffleMessage2: .asciiz "Deck has been reshuffled\n"
+    EndMessage: .asciiz "\nYOU SUCK AT GAMBLING\n"
    
     .align 2
     BaseDeck: .space 208
@@ -43,13 +50,38 @@ main:
     la $s7, FrameBuffer  # $s7 = base addr of frame buffer
     ## $s7 CANT BE OVERRIDDEN / OVERWRITTEN
 
-    initial_messages:
+    initial_message:
     	li $v0, 4
     	la $a0, InitialMessage1
     	syscall
-    	la $a0, InitialMessage2
-    	syscall
 
+    j shuffle_deck
+    reshuffle_deck: 
+        # Print previous deck
+        la $a0, ReshuffleMessage1
+        li $v0, 4
+        syscall
+        la $t0, UserDeck
+        li $t1, 0
+        li $t4, 52
+        print_loop:
+            mul $t2, $t1, 4
+            add $t3, $t0, $t2
+            lw  $a0, 0($t3)
+            li  $v0, 1
+            syscall
+            li  $a0, 32  # ascii for space
+            li  $v0, 11
+            syscall
+            addi $t1, $t1, 1
+            blt  $t1, $t4, print_loop
+            
+        la $a0, ReshuffleMessage2
+        li $v0, 4
+        syscall
+            
+        la $t0, ReshuffleBool
+        sw $zero, 0($t0)  # reset reshufflebool
     shuffle_deck:
         li $s6, -4  # deck index stored in $s6; we iterate through this when pulling from our shuffled deck
         ## $s6 CANT BE OVERRIDDEN / OVERWRITTEN
@@ -202,28 +234,26 @@ main:
             sw $t4, 0($t3)  # store the random value from the base deck in the user deck
             addi $t7, $t7, 4
             ble $t7, $t8, shuffle_loop
-
-        # Print user deck
-        #la $a0, NewLine
-        #li $v0, 4
-        #syscall
-        #la $t0, UserDeck
-        #li $t1, 0
-        #li $t4, 52
-        #print_loop:
-            #mul $t2, $t1, 4
-            #add $t3, $t0, $t2
-            #lw  $a0, 0($t3)
-            #li  $v0, 1
-            #syscall
-            #li  $a0, 32  # ascii for space
-            #li  $v0, 11
-            #syscall
-            #addi $t1, $t1, 1
-            #blt  $t1, $t4, print_loop
             
     # always back the background after shuffling              
     make_background:
+        la $t0, UserBust1
+        sw $zero, 0($t0)
+        la $t0, UserBust2
+        sw $zero, 0($t0)
+        la $t0, DealerBust
+        sw $zero, 0($t0)
+        la $t0, UserAceCount1
+        sw $zero, 0($t0)
+        la $t0, UserAceCount2
+        sw $zero, 0($t0)
+        la $t0, DealerAceCount
+        sw $zero, 0($t0)
+    
+        la $t0, Bank
+        lw $t0, 0($t0)
+        beq $t0, $zero, Done  # if the user is out of money, game over
+    
         li $t0, 512  # screen width
         li $t1, 256  # screen height
         mul $t2, $t0, $t1  # total pixels = width * height
@@ -261,15 +291,16 @@ main:
             
         # always deal after making the new background
         initial_deal:
-            li $v0, 5  # read a string
+            li $v0, 4
+            la $a0, InitialMessage2  # prompt wager
+    	    syscall
+            li $v0, 5  # read an int
             syscall
             la $t0, Bank
             lw $t0, 0($t0)
             ble $v0, $t0, wager_ifelse  # if the wager is less than the bank, it cant happen
                 li $v0, 4
                 la $a0, FaultyWager
-                syscall
-                la $a0, InitialMessage2
                 syscall
                 j initial_deal  # try again
             wager_ifelse:
@@ -281,14 +312,14 @@ main:
             li $s1, 256
             li $s0, 22
             jal draw_card  # first dealer card
-            # arguments: bust count, ace count, x - $s1 - and y - $s2 - coordinates (top left corner)
+            # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
         
             la $s5, UserBust1
             la $s4, UserAceCount1
             li $s1, 183
             li $s0, 144
             jal draw_card  
-            # arguments: bust count, ace count, x - $s1 - and y - $s2 - coordinates (top left corner)
+            # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
             
             la $t0, Card1
             la $t1, CardType
@@ -298,7 +329,7 @@ main:
             li $s1, 263
             li $s0, 144
             jal draw_card  # second user-card
-            # arguments: bust count and ace count (same), x - $s1 - and y - $s2 - coordinates (top left corner)
+            # arguments: bust count and ace count (same), x - $s1 - and y - $s0 - coordinates (top left corner)
             
             la $t0, Card1  # get the first card type
             lw $t0, 0($t0)
@@ -316,28 +347,375 @@ main:
                     li $v0, 4
     		    la $a0, HSDP  # hit, stand, double, split
     		    syscall
-    		j Done
+    		j function_HSDP
                 double_ifelse1:  # if the user does not have sufficient funds, they cant double
     		    li $v0, 4
     		    la $a0, HSP
     		    syscall
-    		j Done
+    		j function_HSP
             pair_ifelse:  # if the user does not have a pair, they cant split
                 blt $t3, $t2, double_ifelse2  # if the user has sufficient funds, they can double
                     li $v0, 4
     		    la $a0, HSD  # hit, stand, double
     		    syscall
-    		j Done
+    		j function_HSD
                 double_ifelse2:  # if the user does not have sufficient funds, they cant double
     		    li $v0, 4
     		    la $a0, HS
     		    syscall
-    		j Done
+    		j function_HS
+    
+    
+            function_HSDP:
+                li $v0, 12
+                syscall  # read char, store ascii value in $v0
+        
+        	li $t0, 'h'
+        	beq $t0, $v0, hit_protocol
+        	li $t0, 's'
+        	beq $t0, $v0, stand_protocol
+                li $t0, 'd'
+                beq $t0, $v0, double_protocol
+                li $t0, 'p'
+                beq $t0, $v0, split_protocol
+                
+                li $v0, 4
+                la $a0, FaultyAction
+                syscall
+                la $a0, HSDP
+                syscall
+                j function_HSDP
+            function_HSP:
+                li $v0, 12
+                syscall  # read char, store ascii value in $v0
+                
+                li $t0, 'h'
+        	beq $t0, $v0, hit_protocol
+        	li $t0, 's'
+        	beq $t0, $v0, stand_protocol
+                li $t0, 'p'
+                beq $t0, $v0, split_protocol
+                
+                li $v0, 4
+                la $a0, FaultyAction
+                syscall
+                la $a0, HSP
+                syscall
+                j function_HSP
+            function_HSD:
+                li $v0, 12
+                syscall  # read char, store ascii value in $v0
+        
+                li $t0, 'h'
+        	beq $t0, $v0, hit_protocol
+        	li $t0, 's'
+        	beq $t0, $v0, stand_protocol
+                li $t0, 'd'
+                beq $t0, $v0, double_protocol
+                
+                li $v0, 4
+                la $a0, FaultyAction
+                syscall
+                la $a0, HSD
+                syscall
+                j function_HSD
+            function_HS:
+                li $v0, 12
+                syscall  # read char, store ascii value in $v0
+    
+                li $t0, 'h'
+        	beq $t0, $v0, hit_protocol
+        	li $t0, 's'
+        	beq $t0, $v0, stand_protocol
+                
+                li $v0, 4
+                la $a0, FaultyAction
+                syscall
+                la $a0, HS
+                syscall
+                j function_HS
+    
+    
+    hit_protocol:
+        j Done
+    stand_protocol:
+        j Done
+    double_protocol:
+        la $t0, Wager
+        lw $t1, 0($t0)
+        mul $t1, $t1, 2
+        sw $t1, 0($t0)  # double the wager amount
+        
+        la $s5, UserBust1
+        la $s4, UserAceCount1
+        li $s1, 127
+        li $s0, 144
+        jal draw_card  # draw one card, then we move on to bust count as the user cannot draw another
+        # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
+        
+        li $t0, 21
+        la $s5, UserBust1
+        la $s4, UserAceCount1
+        lw $t5, 0($s5)  # bust count
+        lw $t4, 0($s4)  # ace count
+        bgt $t5, $t0, double_ace_check  # if user has more than 21, check for aces
+        nop
+        j dealer_protocol  # under 21, check dealer
+        nop
+        double_ace_check:
+            beq $zero, $t4, loser  # no aces, user busts
+            
+            addi $t4, $t4, -1  # remove an ace from the count
+            addi $t5, $t5, -10  # ace low
+            sw $t4, 0($s4)
+            sw $t5, 0($s5)
+            ble $t5, $t0, dealer_protocol  # under 21, check dealer
+            j double_ace_check  # over 21, check for another ace
+    split_protocol:
+        j Done
     
     
     
+        
+        
+    dealer_protocol:
+        li $t5, 1000000
+        dealer_delay0:  # give pause between each card
+            addi $t5, $t5, -1
+            bne $zero, $t5, dealer_delay0
     
+        la $s5, DealerBust
+        la $s4, DealerAceCount
+        li $s1, 190  # card 2
+        li $s0, 22
+        jal draw_card
+        # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
+        
+        li $t5, 1000000
+        dealer_delay1:  # give pause between each card
+            addi $t5, $t5, -1
+            bne $zero, $t5, dealer_delay1
+        
+        li $t0, 17
+        lw $s5, 0($s5)
+        bge $s5, $t0, dealer_decision_check  # if dealer has 17 or more, he must stand
+        
+        la $s5, DealerBust
+        li $s1, 124  # card 3
+        li $s0, 22
+        jal draw_card
+        # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
+        
+        li $t5, 1000000
+        dealer_delay2:  # give pause between each card
+            addi $t5, $t5, -1
+            bne $zero, $t5, dealer_delay2
+        
+        li $t0, 17
+        lw $s5, 0($s5)
+        bge $s5, $t0, dealer_decision_check
+        
+        la $s5, DealerBust
+        li $s1, 322  # card 4
+        li $s0, 22
+        jal draw_card
+        # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
+        
+        li $t5, 1000000
+        dealer_delay3:  # give pause between each card
+            addi $t5, $t5, -1
+            bne $zero, $t5, dealer_delay3
+        
+        li $t0, 17
+        lw $s5, 0($s5)
+        bge $s5, $t0, dealer_decision_check
+        
+        la $s5, DealerBust
+        li $s1, 58  # card 5
+        li $s0, 22
+        jal draw_card
+        # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
+        
+        li $t5, 1000000
+        dealer_delay4:  # give pause between each card
+            addi $t5, $t5, -1
+            bne $zero, $t5, dealer_delay4
+        
+        li $t0, 17
+        lw $s5, 0($s5)
+        bge $s5, $t0, dealer_decision_check
+        
+        la $s5, DealerBust
+        li $s1, 388  # card 6
+        li $s0, 22
+        jal draw_card
+        # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
+        
+        li $t5, 1000000
+        dealer_delay5:  # give pause between each card
+            addi $t5, $t5, -1
+            bne $zero, $t5, dealer_delay5
+        
+        li $t0, 17
+        lw $s5, 0($s5)
+        bge $s5, $t0, dealer_decision_check
+        
+        j dealer_protocol  # if we need more than 6 cards, we will just draw them on top of the first six
+        
+        lw $s4, 0($s4)  # ace count, not addr
+        dealer_decision_check:
+            li $t0, 21
+            bgt $s5, $t0, dealer_ace_check  # if the dealer has over 21, see if he has aces
+            la $t1, UserBust1
+            lw $t1, 0($t1)
+            beq $t1, $s5, tie  # if user and dealer have the same score, tie
+            blt $t1, $s5, loser  # if user has less than dealer, loss
+            j winner  # else, winner
+            
+            dealer_ace_check:
+                beq $zero, $s4, winner  # no aces, dealer busts
+                addi $s4, $s4, -1  # take ace from count
+                addi $s5, $s5, -10  # ace low
+                j dealer_decision_check
+          
+        
+    winner:
+        la $t0, Wager
+        lw $t0, 0($t0)
+        la $t1, Bank
+        lw $t2, 0($t1)
+        add $t2, $t2, $t0
+        sw $t2, 0($t1)  # add the wager amount into Bank
+        
+        li $v0, 4
+        la $a0, WinMessage
+        syscall
+        li $v0, 1
+        move $a0, $t2  # print the bank amount
+        syscall
+        
+        li $t0, 512  # screen width
+        li $t1, 256  # screen height
+        mul $t2, $t0, $t1  # total pixels = width * height
+        mul $t2, $t2, 4  # bytes to words
+
+	li $t5, 2000000
+        win_delay1:  # wait before the lime comes up; lets the user see final cards
+            addi $t5, $t5, -1
+            bne $zero, $t5, win_delay1
+
+        la $t0, LIME
+        lw $t0, 0($t0)  # $t0 = lime
+
+        li $t3, 0  # i = 0; i will iterate across every pixel on the map
+        fill_lime:
+            add $t4, $s7, $t3  # addr = frameBuffer + pixel offset
+            sw  $t0, 0($t4)  # store brown in the addr of our current pixel
+            addi $t3, $t3, 4  # i += 4 (bytes to words)
+            blt  $t3, $t2, fill_lime
+            li $t5, 1000
+            win_delay2:  # wait until the lime is on screen for some time
+                addi $t5, $t5, -1
+                bne $zero, $t5, win_delay2
     
+        la $t0, ReshuffleBool
+        lw $t0, 0($t0)
+        
+        bne $t0, $zero win_do_shuffle
+        j make_background
+        win_do_shuffle:
+            j reshuffle_deck
+            nop
+    loser:
+        la $t0, Wager
+        lw $t0, 0($t0)
+        la $t1, Bank
+        lw $t2, 0($t1)
+        sub $t2, $t2, $t0
+        sw $t2, 0($t1)  # subtract the wager amount from Bank
+        
+        li $v0, 4
+        la $a0, LossMessage
+        syscall
+        li $v0, 1
+        move $a0, $t2  # print the bank amount
+        syscall
+        
+        li $t0, 512  # screen width
+        li $t1, 256  # screen height
+        mul $t2, $t0, $t1  # total pixels = width * height
+        mul $t2, $t2, 4  # bytes to words
+        
+        li $t5, 2000000
+        loss_delay1:  # wait until the red comes on screen; lets user see the final cards
+            addi $t5, $t5, -1
+            bne $zero, $t5, loss_delay1
+
+        la $t0, RED
+        lw $t0, 0($t0)  # $t0 = RED
+
+        li $t3, 0  # i = 0; i will iterate across every pixel on the map
+        fill_red:
+            add $t4, $s7, $t3  # addr = frameBuffer + pixel offset
+            sw  $t0, 0($t4)  # store brown in the addr of our current pixel
+            addi $t3, $t3, 4  # i += 4 (bytes to words)
+            blt  $t3, $t2, fill_red
+            li $t5, 5000
+            loss_delay2:  # make sure the red is on screen for some time
+                addi $t5, $t5, -1
+                bne $zero, $t5, loss_delay2
+                
+        la $t0, ReshuffleBool
+        lw $t0, 0($t0)
+        
+        bne $t0, $zero lose_do_shuffle
+        j make_background
+        lose_do_shuffle:
+            j reshuffle_deck
+            nop
+    tie:
+        la $t2, Bank
+        lw $t2, 0($t2)
+    
+        li $v0, 4
+        la $a0, TieMessage
+        syscall
+        li $v0, 1
+        move $a0, $t2  # print the bank amount
+        syscall
+        
+        li $t0, 512  # screen width
+        li $t1, 256  # screen height
+        mul $t2, $t0, $t1  # total pixels = width * height
+        mul $t2, $t2, 4  # bytes to words
+
+        li $t5, 2000000
+        tie_delay1:  # wait until the gray is on screen for some time; allows user to see final cards
+            addi $t5, $t5, -1
+            bne $zero, $t5, tie_delay1
+
+        la $t0, GRAY
+        lw $t0, 0($t0)  # $t0 = RED
+
+        li $t3, 0  # i = 0; i will iterate across every pixel on the map
+        fill_gray:
+            add $t4, $s7, $t3  # addr = frameBuffer + pixel offset
+            sw  $t0, 0($t4)  # store brown in the addr of our current pixel
+            addi $t3, $t3, 4  # i += 4 (bytes to words)
+            blt  $t3, $t2, fill_gray
+            li $t5, 1000
+            tie_delay2:  # wait until the gray is on screen for some time
+                addi $t5, $t5, -1
+                bne $zero, $t5, tie_delay2
+                
+        la $t0, ReshuffleBool
+        lw $t0, 0($t0)
+        
+        bne $t0, $zero tie_do_shuffle
+        j make_background
+        tie_do_shuffle:
+            j reshuffle_deck
+            nop
     
     
     
@@ -1638,3 +2016,7 @@ main:
     	        jr $ra  # restore return address and jump back
            
         Done:
+            li $v0, 4
+            la $a0, EndMessage
+            syscall
+            
