@@ -5,19 +5,19 @@
    
     RED: .word 0x00FF0000  # card numbers / letters and losing screen
     GREEN: .word 0x00006400  # poker table middle
+    BROWN: .word 0x006B3410  # poker table edges
     BLACK: .word 0x00000000  # card borders
     WHITE: .word 0x00FFFFFF  # card backgrounds
-    BROWN: .word 0x006B3410  # poker table edges
     LIME: .word 0x0000FF00  # winning screen
+    GRAY: .word 0x00D3D3D3  # push (tie) screen
     GOLD: .word 0x00FFD700
     BLUE: .word 0x000000CD  # ^ denotes split
-    GRAY: .word 0x00D3D3D3  # push (tie) screen
    
     InitialMessage1: .asciiz "\n\n\nOnly integers are accepted as wagers.\n YOUR STARTING CHIP COUNT: 1000"
-    InitialMessage2: .asciiz "\nEnter your wager: "
+    EndMessage: .asciiz "\n YOU SUCK AT GAMBLING\n"
     
+    PromptWager: .asciiz "\nEnter your wager: "
     FaultyWager: .asciiz "Insufficient funds, try again."
-    FaultyAction: .asciiz "\nInvalid key. Retry."
     
     HSDP: .asciiz "\nPress 'h' to hit, 's' to stand, 'p' to split, or 'd' to double down: "
     LHSD: .asciiz "\nOn your first (left) hand: Press 'h' to hit, 's' to stand, or 'd' to double down: "
@@ -26,6 +26,7 @@
     LHS: .asciiz "\nOn your first (left) hand: Press 'h' to hit, or 's' to stand: "
     RHS: .asciiz "\nOn your second (right) hand: Press 'h' to hit, or 's' to stand: "
     HS: .asciiz "\nPress 'h' to hit or 's' to stand: "
+    FaultyAction: .asciiz "\nInvalid key. Retry."
     
     WinMessage: .asciiz "\nYou Win!\n YOUR CHIP COUNT: "
     WonLeftLostRight: .asciiz "\nYou won your first hand, but lost your second.\n YOUR CHIP COUNT: "
@@ -41,7 +42,6 @@
     ReshuffleMessage2: .asciiz " (11 - J | 12 - Q | 13 - K | 14 - A)"
     ReshuffleMessage3: .asciiz "\nDeck has been reshuffled\n"
     ReshuffleMessage4: .asciiz "\n YOUR CHIP COUNT: "
-    EndMessage: .asciiz "\n YOU SUCK AT GAMBLING\n"
    
     .align 2
     BaseDeck: .space 208  # stores unshuffled deck
@@ -69,7 +69,8 @@
     SplitDoubleCount: .word 0  # allows us to check doubling availability on split hands 
     SplitBool: .word 0  # set to 1 when we are splitting. alloows us to hijack other protocols instead of rebuilding them
     LeftSplitResult: .word 0  # used for the end screen; 0 is a loss, 1 a push (tie), 2 a win
-    SplitOffset: .word 0
+    SplitOffset: .word 0  # used for hijacking functions from split
+    DoubleBustBool: .word 0  # if we bust on both hands of the split, we dont want to see the dealers cards
    
 .text
 .globl main
@@ -210,7 +211,13 @@ main:
         sw $zero, 0($t0)
         la $t0, SplitOffset
         sw $zero, 0($t0)
-        # reset all of our bust counts, ace counts, split checks, and overflow semi-toggle (0 | 33)
+        la $t0, Card1
+        sw $zero, 0($t0)
+        la $t0, CardType
+        sw $zero, 0($t0)
+        la $t0, DoubleBustBool
+        sw $zero, 0($t0)
+        # reset all of our bust counts, ace counts, split checks, etc
     
         la $t0, Bank
         lw $t1, 0($t0)
@@ -260,7 +267,7 @@ main:
         # always deal after making the new background; allow fall through
         initial_deal:
             li $v0, 4
-            la $a0, InitialMessage2  # prompt wager
+            la $a0, PromptWager  # prompt wager
     	    syscall
             li $v0, 5  # read an int wager, stored in $v0
             syscall
@@ -394,52 +401,53 @@ main:
 ##############################################################################################################################################################################
     hit_protocol:
         li $s2, 0  # i = 0; will be incremented on successive hits to move the card placement
-        
         li $s1, 127
         li $s0, 144  # ^ we dont include the first hit coords in the loop
         hit_loop:
             li $t8, 1000000
             hit_delay:  # give pause between each card
-            addi $t8, $t8, -1
-            bne $zero, $t8, hit_delay
+                addi $t8, $t8, -1
+                bne $zero, $t8, hit_delay
             
             la $s5, UserBustAddr1
             la $s4, UserAceCountAddr1
             jal draw_card
             # arguments: bust count addr and ace count addr(same), x - $s1 - and y - $s0 - coordinates (top left corner)
-        hit_aces_low:
-            li $t0, 21
-            lw $t5, 0($s5)  # bust count in $t5
-            lw $t4, 0($s4)  # ace count in $t4
-            bgt $t5, $t0, hit_ace_check  # check for low ace if we have more than 21
             
-        hit_or_stand_next_card:
-            li $v0, 4
-            la $a0, HS
-            syscall
-            li $v0, 12
-            syscall  # read char, store ascii value in $v0
+            hit_bust_check:
+                li $t0, 21
+                lw $t5, 0($s5)  # bust count in $t5
+                lw $t4, 0($s4)  # ace count in $t4
+                bgt $t5, $t0, hit_ace_check  # check for low ace if we have more than 21
+            
+                hit_or_stand_prompt:
+                    li $v0, 4
+                    la $a0, HS
+                    syscall
+                    li $v0, 12
+                    syscall  # read char, store ascii value in $v0
     
-            li $t0, 'h'
-            beq $t0, $v0, hit_or_stand_protocol
-            li $t0, 's'
-            beq $t0, $v0, dealer_protocol
+                    li $t0, 'h'
+                    beq $t0, $v0, re_hit_loop
+                    li $t0, 's'
+                    beq $t0, $v0, dealer_protocol
             
-            li $v0, 4
-            la $a0, FaultyAction
-            syscall
+                    li $v0, 4
+                    la $a0, FaultyAction  # faulty action; fall through to jump
+                    syscall
                 
-            j hit_or_stand_next_card  # faulty action, loop back
+                    j hit_or_stand_prompt
             
-        hit_ace_check:
-            beq $t4, $zero, loser  # user busts
-            addi $t4, $t4, -1
-            addi $t5, $t5, -10  # ^ ace low, decrement ace count and bust count
-            sw $t4, 0($s4)
-            sw $t5, 0($s5)  # store the new values in the addrs
-            j hit_aces_low  # check again
+                hit_ace_check:
+                    beq $t4, $zero, loser  # user busts (whenever we reach this branch, user has over 21)
+                    addi $t4, $t4, -1
+                    addi $t5, $t5, -10  # ^ ace low, decrement ace count and bust count
+                    sw $t4, 0($s4)
+                    sw $t5, 0($s5)  # store the new values in the addrs
+                    j hit_bust_check  # check again
                 
-        hit_or_stand_protocol:  # used to shift subsequent cards on the gui
+        # used to shift subsequent cards on the gui; in $s2 we store which hit coords we will pull, then increment for the next hit
+        re_hit_loop:
             li $t0, 0
             bne $t0, $s2, second_hit
                 li $s1, 319
@@ -502,9 +510,12 @@ main:
                 li $s0, 114
                 addi $s2, $s2, 1
                 j hit_loop
-            tenth_hit:  # mathematically can have no more than eleven cards (draw two, hit nine plus an extra for safety)
+            tenth_hit:  # mathematically can have no more than eleven cards (draw two, hit nine plus an extra for bust)
+            li $v0, 10
+            syscall  # if we go past this many cards, just end the program to avoid confusion
             
-    # onlt used on initial stands to filter for low aces
+            
+    # only used on initial stands to filter for low aces and hijacked by split stands
     stand_protocol:
         la $s5, UserBustAddr1
         la $s4, UserAceCountAddr1
@@ -529,8 +540,8 @@ main:
                 
         stand_ace_check:
             li $t0, 21
-            beq $zero, $t4, dealer_protocol  # no aces, check dealer protocol
             ble $t5, $t0, dealer_protocol  # under 21, check dealer protocol
+            beq $zero, $t4, dealer_protocol  # no aces, check dealer protocol
             
             # else, fall through
             addi $t4, $t4, -1
@@ -590,11 +601,21 @@ main:
                     jal draw_card 
                     # arguments: bust count, ace count, x - $s1 - and y - $s0 - coordinates (top left corner)
                         
+                        
                     li $t0, 21
                     lw $t5, 0($s5)
                     lw $t4, 0($s4)
-                    bgt $t5, $t0, double_ace_check  # if over 21, check for low aces
-                    j dealer_protocol  # if under 21, check dealer
+                    bgt $t5, $t0, left_double_ace_check  # if over 21, check for low aces
+                    j left_to_right  # if under 21, go to second hand
+                    
+                    left_double_ace_check:
+                        ble $t5, $t0, left_to_right  # under 21, go to next hand
+                        beq $zero, $t4, bust_inc  # no aces, user busts, go to next hand
+                        addi $t4, $t4, -1  # remove an ace from the count
+                        addi $t5, $t5, -10  # ace low
+                        sw $t4, 0($s4)
+                        sw $t5, 0($s5)  # put new values back in the addrs
+                        j left_double_ace_check  # check again after ace removal
         
         
         no_double_hijack:
@@ -618,7 +639,24 @@ main:
         j dealer_protocol  # under 21, check dealer
         
         double_ace_check:
+            li $t0, 21
+            ble $t5, $t0, dealer_protocol  # under 21, go to dealer
+            
+            
+                    la $t1, SplitBool
+                    lw $t2, 0($t1)
+                    beq $t2, $zero, skip_intermediate_hijack  # no aces, user busts
+                        la $t0, DoubleBustBool
+                        lw $t1, 0($t0)
+                        addi $t1, $t1, 1
+                        sw $t1, 0($t0)
+                        beq $zero, $t4, dealer_protocol  # we still may need to see the dealers cards based on the first hand
+                        b i_h_s
+                        
+            skip_intermediate_hijack:
             beq $zero, $t4, loser  # no aces, user busts
+            i_h_s:
+            
             addi $t4, $t4, -1  # remove an ace from the count
             addi $t5, $t5, -10  # ace low
             sw $t4, 0($s4)
@@ -630,7 +668,25 @@ main:
         la $t0, SplitBool
         li $t1, 1
         sw $t1, 0($t0)  # mark split bool as 1; allows for hijacking
-    
+        
+        la $s5, UserBustAddr1
+        lw $t1, 0($s5)
+        div $t1, $t1, 2
+        sw $t1, 0($s5)
+        la $t9, UserBustAddr2
+        sw $t1, 0($t9)  # ^ divide our bust value by two and store the result for each split hand
+        
+        li $t0, 14
+        la $t2, Card1  # if the first card is an ace, it is our split card
+        lw $t3, 0($t2)
+        bne $t3, $t0, split_ace
+            li $t0, 1
+            la $s4, UserAceCountAddr1
+            sw $t0, 0($s4)
+            la $s4, UserAceCountAddr2
+            sw $t0, 0($s4)  # set the ace count of each to 1 if we are splitting aces
+        split_ace:
+        
         la $t0, Wager1
         lw $t1, 0($t0)
         la $t7, Wager2
@@ -640,15 +696,16 @@ main:
         lw $t4, 0($t3)  # store bank in $t4
         mul $t2, $t1, 4  # store wager * 4 in $t2; allows us to check if they can double on both split hands
         la $t5, SplitDoubleCount
-        bgt $t2, $t4, split_double_twice  # if wager * 4 is greater than bank, user cant double twice     
-            li $t6, 2
-            sw $t6, 0($t5)  # split double count = 2
-        split_double_twice:
-        mul $t2, $t1, 3  # now wager * 3 in $t2; allows us to check if they can double on one split hand
+        mul $t2, $t1, 3  # if wager * 3 larger than bank, allows us to check if they can double on one split hand
         bgt $t2, $t4, split_double_once
             li $t6, 1
             sw $t6, 0($t5)  # split double count = 1
         split_double_once:
+        mul $t2, $t1, 4
+        bgt $t2, $t4, split_double_twice  # if wager * 4 is greater than bank, user can double twice     
+            li $t6, 2
+            sw $t6, 0($t5)  # split double count = 2
+        split_double_twice:
         
         la $t0, GOLD
         lw $t1, 0($t0)  # gold border, leave one thicker than blue segment
@@ -699,80 +756,74 @@ main:
             li $s1, 127  # initial extra card on left side (user starts with two before making decision
             li $s0, 144
             
-            lw $t1, 0($s5)
-            div $t1, $t1, 2
-            sw $t1, 0($s5)
-            la $t9, UserBustAddr2
-            sw $t1, 0($t9)  # ^ divide our bust value by two and store the result for each split hand
+        split_loop:
+            li $t8, 1000000
+            split_delay:  # give pause between each card
+                addi $t8, $t8, -1
+                bne $zero, $t8, split_delay
+                
+            jal draw_card  # give user their second card of the hand (non optional)
             
-            split_loop:
-                li $t8, 1000000
-                split_delay1:  # give pause between each card
-                    addi $t8, $t8, -1
-                    bne $zero, $t8, split_delay1
+            split_hit_stand_or_double:
+                la $t2, SplitDoubleCount
+                lw $t3, 0($t2)
+                la $t0, LeftOrRight  # 0 for left, 1 for right
+                lw $t1, 0($t0)
+                beq $t1, $zero, left_hand_hit_stand_or_double  # jump to left hand or fall through to the right hand
                 
-                jal draw_card  # give user their second card of the hand (non optional)
-            
-                split_hit_or_stand:
-                    la $t2, SplitDoubleCount
-                    lw $t3, 0($t2)
-                    la $t0, LeftOrRight  # 0 for left, 1 for right
-                    lw $t1, 0($t0)
-                    beq $t1, $zero, left_hand_hit_or_stand  # jump to left hand or fall through to the right hand
+                right_hand_hit_stand_or_double:
+                    li $v0, 4
+                    beq $t3, $zero, right_no_double  # split double count is zero, user cant afford to double
+                        la $a0, RHSD
+                        syscall
+                        j h_s_d
+                    right_no_double:
+                        la $a0, RHS
+                        syscall
+                        j h_s
                 
-                    right_hand_hit_or_stand:
-                        li $v0, 4
-                        beq $t3, $zero, no_double1  # split double count is zero, user cant afford to double
-                            la $a0, RHSD
-                            syscall
-                            j h_s_d
-                        no_double1:
-                            la $a0, RHS
-                            syscall
-                            j h_s
-                
-                    left_hand_hit_or_stand:
-                        li $v0, 4
-                        beq $t3, $zero, no_double2  # split double count is zero, user cant afford to double
-                            la $a0, LHSD
-                            syscall
-                            j h_s_d
-                        no_double2:
-                            la $a0, LHS
-                            syscall
-                            j h_s
+                left_hand_hit_stand_or_double:
+                    li $v0, 4
+                    beq $t3, $zero, left_no_double  # split double count is zero, user cant afford to double
+                        la $a0, LHSD
+                         syscall
+                        j h_s_d
+                    left_no_double:
+                        la $a0, LHS
+                        syscall
+                        j h_s
         
-                h_s:
-                    li $v0, 12
-                    syscall
+            h_s:
+                li $v0, 12
+                syscall
                   
-                    li $t0, 'h'
-                    beq $t0, $v0, split_hit_protocol
-                    li $t0, 's'
-                    beq $t0, $v0, stand_protocol
+                li $t0, 'h'
+                beq $t0, $v0, split_hit_protocol
+                li $t0, 's'
+                beq $t0, $v0, stand_protocol
             
-                    li $v0, 4
-                    la $a0, FaultyAction
-                    syscall
+                li $v0, 4
+                la $a0, FaultyAction
+                syscall
                 
-                    j split_hit_or_stand  # faulty action, loop back
+                j split_hit_stand_or_double  # faulty action, loop back
                     
-                h_s_d:
-                    li $v0, 12
-                    syscall
+            h_s_d:
+                li $v0, 12
+                syscall
                   
-                    li $t0, 'h'
-                    beq $t0, $v0, split_hit_protocol
-                    li $t0, 's'
-                    beq $t0, $v0, stand_protocol
-                    li $t0, 'd'
-                    beq $t0, $v0, double_protocol
+                li $t0, 'h'
+                beq $t0, $v0, split_hit_protocol
+                li $t0, 's'
+                beq $t0, $v0, stand_protocol
+                li $t0, 'd'
+                beq $t0, $v0, double_protocol
             
-                    li $v0, 4
-                    la $a0, FaultyAction
-                    syscall
+                li $v0, 4
+                la $a0, FaultyAction
+                syscall
                 
-                   j split_hit_or_stand  # faulty action, loop back
+                j split_hit_stand_or_double  # faulty action, loop back
         
             split_hit_protocol:
                 la $t8, LeftOrRight
@@ -805,7 +856,7 @@ main:
                         left_split_ace_check:
                             li $t0, 21
                             ble $t5, $t0, left_hit_prompt  # less than 21, user can hit again
-                            beq $zero, $t4, dealer_protocol  # no aces, user has busted, move to next hand
+                            beq $zero, $t4, bust_inc  # no aces, user has busted, move to next hand
             
                             # else, fall through
                             addi $t4, $t4, -1
@@ -861,23 +912,21 @@ main:
                                 li $s0, 114
                                 j pass2
                             eigth_split_hit_l:
-                            addi $t2, $t2, 1
-                                
                             
                             pass2:
-                            li $v0, 12
-                            syscall
+                                li $v0, 12
+                                syscall
                   
-                            li $t0, 'h'
-                            beq $t0, $v0, left_hand_loop
-                            li $t0, 's'
-                            beq $t0, $v0, stand_protocol
+                                li $t0, 'h'
+                                beq $t0, $v0, left_hand_loop
+                                li $t0, 's'
+                                beq $t0, $v0, stand_protocol
             
-                            li $v0, 4
-                            la $a0, FaultyAction
-                            syscall
+                                li $v0, 4
+                                la $a0, FaultyAction
+                                syscall
                             
-                            j left_hit_prompt  # faulty action, try again
+                                j left_hit_prompt  # faulty action, try again
                     
                 hitting_right_hand:
                     la $t0, SplitOffset
@@ -908,8 +957,13 @@ main:
                         right_split_ace_check:
                             li $t0, 21
                             ble $t5, $t0, right_hit_prompt  # less than 21, user can hit again
-                            beq $zero, $t4, dealer_protocol  # no aces, user has busted, move to next hand
-            
+                            bne $zero, $t4, right_bust_inc  # no aces, user has busted
+                                la $t0, DoubleBustBool
+                                lw $t1, 0($t0)
+                                addi $t1, $t1, 1
+                                sw $t1, 0($t0)    
+                                j dealer_protocol  # increment bust bool then go to dealer
+                            right_bust_inc:
                             # else, fall through
                             addi $t4, $t4, -1
                             addi $t5, $t5, -10  # remove ten (ace low), take one from the count
@@ -964,28 +1018,27 @@ main:
                                 li $s0, 114
                                 j pass1
                             eigth_split_hit_r:
-                            addi $t2, $t2, 1
-                                
                             
                             pass1:
-                            li $v0, 12
-                            syscall
+                                li $v0, 12
+                                syscall
                   
-                            li $t0, 'h'
-                            beq $t0, $v0, right_hand_loop
-                            li $t0, 's'
-                            beq $t0, $v0, stand_protocol
+                                li $t0, 'h'
+                                beq $t0, $v0, right_hand_loop
+                                li $t0, 's'
+                                beq $t0, $v0, stand_protocol
             
-                            li $v0, 4
-                            la $a0, FaultyAction
-                            syscall
+                                li $v0, 4
+                                la $a0, FaultyAction
+                                syscall
                             
-                            j right_hit_prompt  # faulty action, try again
-                            
-                            
-                            
+                                j right_hit_prompt  # faulty action, try again
                 
-                
+            bust_inc:
+                la $t0, DoubleBustBool
+                lw $t1, 0($t0)
+                addi $t1, $t1, 1
+                sw $t1, 0($t0)
             left_to_right:
                 la $s5, UserBustAddr2  # second (right) hand
                 la $s4, UserAceCountAddr2
@@ -997,9 +1050,16 @@ main:
                 j split_loop
         
     dealer_protocol:
+    
                 la $t8, SplitBool
                 lw $t9, 0($t8)  # store split bool in $t9. if it is 1 we will hijack the function, as it is being used by split
                 beq $t9, $zero, no_dealer_hijack
+                
+                la $t0, DoubleBustBool
+                lw $t1, 0($t0)
+                li $t2, 2
+                beq $t2, $t1, double_bust_loss  # if both hands bost, dont even bother
+                
                 la $t8, LeftOrRight
                 lw $t9, 0($t8)
                 bne $t9, $zero, no_dealer_hijack  # if we are on the right, let the dealer draw
@@ -1115,33 +1175,37 @@ main:
         sw $t1, 0($t0)
         j dealer_protocol  # if we need more than 6 cards, we will just draw them on top of the first six
         
-        # when the dealer has over 16
+        # when the dealer has 17 or more
         dealer_decision_check: 
+            la $t1, UserBustAddr1
+            lw $t2, 0($t1)
+        
+        
                     la $t8, SplitBool
                     lw $t9, 0($t8)  # store split bool in $t9. if it is 1 we will hijack the function, as it is being used by split
                     beq $t9, $zero, no_dealer_decision_hijack
                     
-                    li $t0, 21
-                    
-                    la $t1, UserBustAddr1
-                    lw $t2, 0($t1)  # left bust value
-                    bgt $t2, $t0, left_loser  # if user has more than 21, loss
-                    
-                    bgt $t5, $t0, left_dealer_ace_check  # if the dealer has over 21, see if he has aces
-                    
-                    beq $t2, $t5, left_tie  # if user and dealer have the same score, tie
-                    blt $t2, $t5, left_loser  # if user has less than dealer, loss
-                    j left_winner  # else, winner
-                        
-                    left_dealer_ace_check:
-                        beq $zero, $t4, left_winner  # no aces, dealer busts
+                    split_dealer_ace_check:
+                        li $t6, 17
+                        bge $t5, $t6, dont_return  # if user has 17 or more, keep it moveing
+                            jr $ra   # if dealer has less than 17, return
+                        dont_return:
+                        li $t0, 21
+                        ble $t5, $t0, terminate_check  # if dealer has less than 21, exit
+                        beq $zero, $t4, terminate_check  # no aces, exit
                         addi $t4, $t4, -1
                         addi $t5, $t5, -10  # ace low, take ace from count
                         sw $t4, 0($s4)
                         sw $t5, 0($s5)  # update dealer bust and ace count addrs
-                        li $t0, 17
-                        bge $t5, $t0, left_dealer_ace_check  # if dealer has more than 16, go back to decision
-                        jr $ra  # if dealer now has less than 17, return to draw another card; we use jal and $ra so we put the cards in the right place on the gui
+                        b split_dealer_ace_check
+                      
+                    terminate_check:
+                    
+                    bgt $t2, $t0, left_loser  # if user has more than 21, loss
+                    bgt $t5, $t0, left_winner  # if the dealer has over 21 and the user doesnt, its a win
+                    beq $t2, $t5, left_tie  # if user and dealer have the same score, tie
+                    blt $t2, $t5, left_loser  # if user has less than dealer, loss
+                    j left_winner  # else, winner
                         
                     left_winner:
                         la $t0, LeftSplitResult
@@ -1169,18 +1233,17 @@ main:
                         la $t1, UserBustAddr2
                         lw $t2, 0($t1)  # move in the second bust value
                         j dealer_rehijack  # get status of second deck
-            
         
-            no_dealer_decision_hijack:
-            
-            la $t1, UserBustAddr1
-            lw $t2, 0($t1)
-            
+        
             dealer_rehijack:
+                la $t1, UserBustAddr2
+                lw $t2, 0($t1)  # move in the second bust value
+               
+            no_dealer_decision_hijack:
             
             li $t0, 21
             bgt $t2, $t0, loser  # user busts
-            bgt $t5, $t0, dealer_ace_check  # if the dealer has over 21, see if he has ac
+            bgt $t5, $t0, dealer_ace_check  # if the dealer has over 21, see if he has an ace
             
             beq $t2, $t5, tie  # if user and dealer have the same score, tie
             blt $t2, $t5, loser  # if user has less than dealer, loss
@@ -1194,7 +1257,7 @@ main:
                 sw $t5, 0($s5)  # update dealer bust and ace count addrs
                 li $t0, 17
                 bge $t5, $t0, dealer_decision_check  # if dealer has more than 16, go back to decision
-                jr $ra  # if dealer now has less than 17, return to draw another card; we use jal and $ra so we put the cards in the right place on the gui
+                    jr $ra  # if dealer now has less than 17, return to draw another card; we use jal and $ra so we put the cards in the right place on the gui
 ##############################################################################################################################################################################
           
 ## Result Block
@@ -1268,7 +1331,7 @@ main:
         la $t0, LIME
         lw $t9, 0($t0)  # $t9 = lime; win screen
         j end_screen
-        
+      
     loser:
                 la $t4, SplitBool
                 lw $t5, 0($t4)
@@ -1314,6 +1377,16 @@ main:
                 lw $t7, 0($t0)
                 j loss_unhijack
                 
+        double_bust_loss:
+            la $t4, SplitBool
+            lw $t5, 0($t4)
+            beq $zero, $t5, no_split_loss
+            la $t0, Wager2
+            lw $t1, 0($t0)
+            la $t2, Bank
+            lw $t3, 0($t2)
+            sub $t3, $t3, $t1
+            sw $t3, 0($t2)
         no_split_loss:
         
         li $v0, 4
@@ -1523,29 +1596,29 @@ main:
             lw $t0, 0($t2)  # get its type
         
             addi $t1, $zero, 2
-            beq $t0, $t1, type_four
+            beq $t0, $t1, type_two
             addi $t1, $zero, 3
-            beq $t0, $t1, type_four
+            beq $t0, $t1, type_three
             addi $t1, $zero, 4
             beq $t0, $t1, type_four
             addi $t1, $zero, 5
-            beq $t0, $t1, type_four
+            beq $t0, $t1, type_five
             addi $t1, $zero, 6
-            beq $t0, $t1, type_four
+            beq $t0, $t1, type_six
             addi $t1, $zero, 7
             beq $t0, $t1, type_seven
             addi $t1, $zero, 8
-            beq $t0, $t1, type_seven
+            beq $t0, $t1, type_eight
             addi $t1, $zero, 9
-            beq $t0, $t1, type_seven
+            beq $t0, $t1, type_nine
             addi $t1, $zero, 10
-            beq $t0, $t1, type_seven
+            beq $t0, $t1, type_ten
             addi $t1, $zero, 11
-            beq $t0, $t1, type_fourteen
+            beq $t0, $t1, type_eleven
             addi $t1, $zero, 12
-            beq $t0, $t1, type_fourteen
+            beq $t0, $t1, type_twelve
             addi $t1, $zero, 13
-            beq $t0, $t1, type_fourteen
+            beq $t0, $t1, type_thirteen
             addi $t1, $zero, 14
             beq $t0, $t1, type_fourteen
             # methods for drawing each of the cards, adding its value to bust, and for 14 incrementing the ace count
