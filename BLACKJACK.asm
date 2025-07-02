@@ -1,3 +1,9 @@
+#### This program runs blackjack. You may hit, stand, double, and split within the games rules and your bank restrictions. (with the excpetion of not being able to split a split hand)
+#### It features a 52 card deck which is shuffled on a new hand if the amount of cards already played is more than 34. It also has ace-low detection for the dealer and the user.
+#### The poker table is on the MARS bitmap. It will show your cards, the dealers cards, and a flashing light indicating game results. 
+#### All prompts, user actions, messages, and bank statements are initiated / shown in the I/O stream. Program will terminate when the user bank hits zero.
+####  @ author    Will Calder, 2025
+
 .data
 
     .align 2  # makes sure the space is aligned on a 2^n bit; allows proper memory alignment for words
@@ -1533,8 +1539,8 @@ main:
         sw $ra, 0($sp)  # store return address on the top of the stack; we will be jumping a lot so it may be overridden in $ra
         
         addi $s6, $s6, 4  # increment the card index count to take out our card from the deck
-        li $t0, 140
-        blt $s6, $t0, reshuffle_bool  # if we have used more than 34 cards, flip reshuffle bool to true
+        li $t0, 136  # 34 * 4 (bytes to words)
+        blt $s6, $t0, reshuffle_bool  # if we have used 34 or more cards, flip reshuffle bool to true
             la $t0, ReshuffleBool
             li $t1, 1
             sw $t1, 0($t0)
