@@ -17,7 +17,7 @@
     
     Newline: .asciiz "\n"
     
-    InitialMessage1: .asciiz "Welcome.\nCards are pulled from one deck which will be periodically reset.\nStandard rules apply.\n"
+    InitialMessage1: .asciiz "\nWelcome.\nCards are pulled from one deck which will be periodically reset.\nYour cards will be on the bottom half of the bitmap.\nStandard rules apply.\n"
     InitialMessage2: .asciiz "You may exit with your chips at any time by entering 'e'.\nIf you run out of chips, you will be kicked out.\n\n  Your chip count: 10,000\n\n"
     
     PromptWager: .asciiz "Enter your wager: "
@@ -25,6 +25,12 @@
     ReshuffleMessage1: .asciiz "Previous Deck >> "
     ReshuffleMessage2: .asciiz "\n(The deck has been reshuffled)\n"
     ReshuffleMessage3: .asciiz "\n  Your chip count: "
+    
+    PromptHS: .asciiz "Press 'h' to hit or 's' to stand: "
+    PromptHSD: .asciiz "Press 'h' to hit, 's' to stand, or 'd' to double down: "
+    PromptHSDP: .asciiz "Press 'h' to hit, 's' to stand, 'd' to double down, or 'p' to split: "
+    
+    FaultyAction: .asciiz "\nInvalid key.\n"
     
     EndMessage: .asciiz "Maybe Blackjack isn't your game.\n\n"
     
@@ -38,7 +44,7 @@
     Wager1: .word 0  # store the users wager (if they split, stores left hand wager)
     Wager2: .word 0  # store users right hand wager if they split
     
-    ReshuffleBool: .byte 0  # 0 when we dont want to reshuffle, 1 when we do
+    ReshuffleBool: .word 0  # 0 when we dont want to reshuffle, 1 when we do
     
     DrawCard: .word 0 # indicates if and what card we are drawing when calling to fill a rectangle
     
@@ -53,7 +59,8 @@
     
     Card1Type: .word 0
     CardType: .word 0  # ^ stores the type of card we have; used for detecting pairs
-    SplitBool: .byte 0  # toggles to one if the user has a pair and is able to split
+    SplitBool: .word 0  # toggles to one if the user has a pair and is able to split
+    DoubleBool: .word 0  # toggles to one if the user has the funds to double
     
     
 .text
@@ -234,6 +241,8 @@ main:
         sw $zero, 0($t0)
         la $t1, SplitBool
         sw $zero, 0($t1)
+        la $t2, DoubleBool
+        sw $zero, 0($t2)
         # reset all of the data we used on the last hand
         
         li $s0, 0
@@ -272,8 +281,20 @@ main:
     	    syscall
             li $v0, 5
             syscall
-            #### 'e' for exit, nothing else
             
+            #### 'e' for exit, everything else is a wager or a fautyaction / faultywager
+            
+            la $t0, Wager1
+            sw $v0, 0($t0)  # save the wager amount given by the user
+            
+            mul $t2, $v0, 2
+            la $t3, Bank
+            lw $t4, 0($t3)
+            bgt $t2, $t4, give_first_cards
+                li $t5, 1
+                la $t6, DoubleBool  # if the user has the funds, toggle the double bool
+                sw $t5, 0($t6)
+   
         give_first_cards:
             la $t6, CardDrawer  # 0 for the dealer, 1 for the user, 2 for the users left hand
             li $t7, 1  # indicate that the user is drawing cards (used for bust value and ace count)
@@ -307,11 +328,11 @@ main:
             la $t0, CardType
             la $t1, Card1Type
             lw $t2, 0($t0)
-            lw $t2, 0($t1)
-            bne $t1, $t2, split_not_possible  # if the users first two cards are of the same type, enable the option to split by flipping the bool
-                la $t3, SplitBool
-                li $t4, 1
-                sw $t4, 0($t3)
+            lw $t3, 0($t1)
+            bne $t2, $t3, split_not_possible  # if the users first two cards are of the same type, enable the option to split by flipping the bool
+                la $t4, SplitBool
+                li $t5, 1
+                sw $t5, 0($t4)
                 split_not_possible:
             
             la $t6, CardDrawer
@@ -326,30 +347,60 @@ main:
             lw $s5, 0($t4)
             jal draw_card  # first dealer card
             # args - starting x in $s0, starting y in $s1, x width in $s2, y height in $s3, left color in $s4, right color in $s5
+########################################################################################################################################################################################
+
+## Prompt user action; deal more cards to the user and the dealer
+########################################################################################################################################################################################
+    prompt_user_decision:
+        la $t2, SplitBool
+        lw $t3, 0($t2)
+        la $t0, DoubleBool
+        lw $t1, 0($t0)
+        
+        bne $t1, $zero, prompt_hit_stand_plus  # if the user does not have funds to double, they cannot double or split
+            sw $zero, 0($t2)  # set SplitBool to zero
+            lw $t3, 0($t2)  # update $t3
+            la $a0, PromptHS
+            j user_response
+            prompt_hit_stand_plus:
+        beq $t3, $zero, prompt_hit_stand_double  # if the SplitBool is zero, the user can only hit, stand, or double
+            la $a0, PromptHSDP  # if not, they can hit, stand, double, or split
+            j user_response
+            prompt_hit_stand_double:
+        la $a0, PromptHSD
+        
+        user_response:
+            li $v0, 4
+            syscall  # print prompt
+            li $v0, 12
+            syscall  # call for user character input
             
+            li $t0, 'h'
+            beq $t0, $v0, hit_protocol
+            li $t0, 's'
+            beq $t0, $v0, stand_protocol
             
-            #############################
-            la $t1, UserBustAddr1
-            la $t2, UserAceCountAddr1
-            la $t3, DealerBustAddr
-            la $t4, DealerAceCountAddr
-            lw $t5, 0($t1)
-            lw $t6, 0($t2)
-            lw $t7, 0($t3)
-            lw $t8, 0($t4)
-            li $v0, 1
-            move $a0, $t5
+            beq $t1, $zero, no_double_no_split  # user does not have funds to double or split
+        	beq $t3, $zero, no_split  # user is not able to split
+                    li $t0, 'p'
+                    beq $t0, $v0, split_protocol  # if the user can split, fall through to double which they can also do
+                    no_split:
+                    li $t0, 'd'
+                    beq $t0, $v0, double_protocol
+                no_double_no_split:
+            
+            li $v0, 4
+            la $a0, FaultyAction  # if the user has used an invalid input
             syscall
-            move $a0, $t6
-            syscall
-            move $a0, $t7
-            syscall
-            move $a0, $t8
-            syscall
-            la $t0, ReshuffleBool
-            lw $t1, 0($t0)
-            bne $zero, $t1, print_previous_deck
-                j deal_hand
+            j prompt_user_decision  # try again
+           
+             
+    double_protocol:
+    hit_protocol:
+    stand_protocol:
+    split_protocol:
+    dealer_protocol:
+        
 ########################################################################################################################################################################################
 
 ## Use the bitmap; draw cards / end screens with all of their functionality (bust value changes, bank changes, etc)
@@ -403,6 +454,7 @@ main:
             jr $ra  # jr $ra means we will go to the line after the jal which sent us here
             # this register can be used by the caller of fill_rectangle_bitmap, or it can be hijacked by draw_card_fall_through (first-caller $ra stored on the stack in draw_card)
         
+        
         draw_card_fall_through:
             sw $zero, 0($t0)  # stop from drawing successive cards, allow for the hijacking of jr $ra; this will have to be toggled on in draw_card
             
@@ -427,7 +479,6 @@ main:
             
             addi $s6, $s6, 1  # increment our deck index, as we will be moving to the next card
             
-            
             li $t2, 20
             la $t5, BLACK  # default the color to black
             blt $t9, $t2, pull_suit_correction_latch
@@ -437,11 +488,8 @@ main:
             lw $s4, 0($t5)
             lw $s5, 0($t5)  # save our color to both halves (RED / BLACK)
             
-            la $t0, CardType
-            sw $t9, ($t0)  # save to CardType checking for splits; we do it after the suit correction because a red and black card can be split
-            
             #li $t4, 8
-            #ble $9, $t4, draw_type_eight
+            #ble $t9, $t4, draw_type_eight
             #b draw_type_fourteen
             # Below used for real game; when above is uncommented it is used for playing with just aces and eights (when trying to play with splits)
             li $t4, 2
@@ -489,7 +537,7 @@ main:
                 jal fill_rectangle_bitmap
                 # args - starting x in $s0, starting y in $s1, x width in $s2, y width in $s3, left color in $s4, right color in $s5
                 li $t9, 2
-                j update_bust_value  # updates the bust value with our card in $t9
+                j update_bust_value  # updates the bust value with our CardType in $t9
                 
             draw_type_three:
                 li $s2, 42
@@ -506,7 +554,7 @@ main:
                 jal fill_rectangle_bitmap
                 # args - starting x in $s0, starting y in $s1, x width in $s2, y width in $s3, left color in $s4, right color in $s5
                 li $t9, 3
-                j update_bust_value  # updates the bust value with our card in $t9
+                j update_bust_value  # updates the bust value with our CardType in $t9
                 
             draw_type_four:
                 addi $s1, $s1, 26
@@ -522,7 +570,7 @@ main:
                 jal fill_rectangle_bitmap
                 # args - starting x in $s0, starting y in $s1, x width in $s2, y width in $s3, left color in $s4, right color in $s5
                 li $t9, 4
-                j update_bust_value  # updates the bust value with our card in $t9
+                j update_bust_value  # updates the bust value with our CardType in $t9
                 
             draw_type_five:
                 li $s2, 42
@@ -541,7 +589,7 @@ main:
                 jal fill_rectangle_bitmap
                 # args - starting x in $s0, starting y in $s1, x width in $s2, y width in $s3, left color in $s4, right color in $s5
                 li $t9, 5
-                j update_bust_value  # updates the bust value with our card in $t9
+                j update_bust_value  # updates the bust value with our CardType in $t9
                 
             draw_type_six:
                 addi $s1, $s1, 26
@@ -560,7 +608,7 @@ main:
                 jal fill_rectangle_bitmap
                 # args - starting x in $s0, starting y in $s1, x width in $s2, y width in $s3, left color in $s4, right color in $s5
                 li $t9, 6
-                j update_bust_value  # updates the bust value with our card in $t9
+                j update_bust_value  # updates the bust value with our CardType in $t9
                 
             draw_type_seven:
                 li $s2, 42
@@ -572,7 +620,7 @@ main:
                 jal fill_rectangle_bitmap
                 # args - starting x in $s0, starting y in $s1, x width in $s2, y width in $s3, left color in $s4, right color in $s5
                 li $t9, 7
-                j update_bust_value  # updates the bust value with our card in $t9
+                j update_bust_value  # updates the bust value with our CardType in $t9
                 
             draw_type_eight:
                 li $s2, 42
@@ -590,7 +638,7 @@ main:
                 jal fill_rectangle_bitmap
                 # args - starting x in $s0, starting y in $s1, x width in $s2, y width in $s3, left color in $s4, right color in $s5
                 li $t9, 8
-                j update_bust_value  # updates the bust value with our card in $t9
+                j update_bust_value  # updates the bust value with our CardType in $t9
                 
             draw_type_nine:
                 li $s2, 42
@@ -607,7 +655,7 @@ main:
                 jal fill_rectangle_bitmap
                 # args - starting x in $s0, starting y in $s1, x width in $s2, y width in $s3, left color in $s4, right color in $s5
                 li $t9, 9
-                j update_bust_value  # updates the bust value with our card in $t9
+                j update_bust_value  # updates the bust value with our CardType in $t9
                 
             draw_type_ten:
                 li $s2, 10
@@ -625,7 +673,7 @@ main:
                 jal fill_rectangle_bitmap
                 # args - starting x in $s0, starting y in $s1, x width in $s2, y width in $s3, left color in $s4, right color in $s5
                 li $t9, 10
-                j update_bust_value  # updates the bust value with our card in $t9
+                j update_bust_value  # updates the bust value with our CardType in $t9
                 
             draw_type_eleven:
                 addi $s1, $s1, 52
@@ -638,8 +686,8 @@ main:
                 li $s3, 66
                 jal fill_rectangle_bitmap
                 # args - starting x in $s0, starting y in $s1, x width in $s2, y width in $s3, left color in $s4, right color in $s5
-                li $t9, 10  # card bust value is only 10
-                j update_bust_value  # updates the bust value with our card in $t9
+                li $t9, 11
+                j update_bust_value  # updates the bust value with our CardType in $t9
                 
             draw_type_twelve:
                 li $s2, 42
@@ -659,8 +707,8 @@ main:
                 li $s3, 24
                 jal fill_rectangle_bitmap
                 # args - starting x in $s0, starting y in $s1, x width in $s2, y width in $s3, left color in $s4, right color in $s5
-                li $t9, 10  # card bust value is only 10
-                j update_bust_value  # updates the bust value with our card in $t9
+                li $t9, 12
+                j update_bust_value  # updates the bust value with our CardType in $t9
                 
             draw_type_thirteen:
                 li $s2, 12
@@ -678,8 +726,8 @@ main:
                 addi $s1, $s1, -26
                 jal fill_rectangle_bitmap
                 # args - starting x in $s0, starting y in $s1, x width in $s2, y width in $s3, left color in $s4, right color in $s5
-                li $t9, 10  # card bust value is only ten
-                j update_bust_value  # updates the bust value with our card in $t9
+                li $t9, 13
+                j update_bust_value  # updates the bust value with our CardType in $t9
                 
             draw_type_fourteen:
                 li $s2, 42
@@ -694,8 +742,8 @@ main:
                 addi $s0, $s0, 28
                 jal fill_rectangle_bitmap
                 # args - starting x in $s0, starting y in $s1, x width in $s2, y width in $s3, left color in $s4, right color in $s5
-                li $t9, 14  # indicate we have an ace; bust value will be adjusted (to 11) and ace count incremented
-                j update_bust_value  # updates the bust value and the ace count with our card in $t9
+                li $t9, 14
+                j update_bust_value  # updates the bust value and the ace count with our CardType in $t9
                 
             update_bust_value:
                 la $t0, CardDrawer  # 0 when the dealer is drawing, 1 when the user is drawing, 2 when the users left split hand is drawing
@@ -718,14 +766,25 @@ main:
                     la $t8, UserAceCountAddr2  # load our bust and ace count addr of whoever is the CardDrawer into $t7 and $t8
                     user_bust_latch2:
                   
+                la $t0, CardType
+                sw $t9, 0($t0)  # save the CardType
+                
                 li $t5, 14
                 beq $t9, $t5, update_bust_ace
-                update_bust_two_to_thirteen:
+                li $t5, 11
+                bge $t9, $t5, update_bust_eleven_to_thirteen
+                update_bust_two_to_ten:
                     lw $t3, 0($t7)
-                    add $t4, $t3, $t9  # all incoming bust values are between 2-10 or 14; if they aren't 14, we just add their value
+                    add $t4, $t3, $t9  # add bust value (for cards 2-10, the bust value is the CardType)
                     sw $t4, 0($t7)
                     j card_drawn
-                         
+                        
+                update_bust_eleven_to_thirteen:
+                    lw $t3, 0($t7)
+                    addi $t4, $t3, 10  # add bust value (for J,Q,K it is 10)
+                    sw $t4, 0($t7)
+                    j card_drawn
+                           
                 update_bust_ace:
                     lw $t3, 0($t7)
                     addi $t4, $t3, 11  # an ace has a bust value of 11
